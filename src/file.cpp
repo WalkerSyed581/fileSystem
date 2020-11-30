@@ -3,7 +3,7 @@
 #include "../include/filesystem/file.h"
 
 
-File::getData(){
+string File::get_data(){
     return this->data;
 }
 
