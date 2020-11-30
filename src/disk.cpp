@@ -1,5 +1,7 @@
 #include <iostream>
 #include <string>
+#include <sstream>
+#include <iterator>
 #include <map>
 #include <fstream> 
 #include <stringstream>
@@ -18,9 +20,7 @@ Metadata Entry: \n
 File Info Element: &
 Segment Separator: ,
 FileSystem Starts After: |
-FileName: *
-FileContent: &
-FilesSeparator: |
+FilesSeparator: \n
 
 
 */
@@ -49,10 +49,15 @@ void Disk::set_file_metadata(int seg_sequence){
 Disk::Disk(int meta_data_limit){
     this->meta_data_limit = meta_data_limit;
     map<string,vector<int>> data;
+    vector<int> free_segments;
     fstream fin("file_system.txt",ios::in);
     fstream fout;
     string metadata,field,entry,segments;
+    int file_count = 0;
     
+    for(int i = 0;i < 90;i++){
+        free_segments.push_back(i);
+    }
 
 
     if (fin.fail()) {
@@ -66,6 +71,7 @@ Disk::Disk(int meta_data_limit){
         stringstream buffer(metadata);
 
         while(getline(buffer, field, '\n')){
+            file_count += 1;
             getline(field,entry,'&');
 
             getline(field,segments,'&');
@@ -77,15 +83,19 @@ Disk::Disk(int meta_data_limit){
             while ((pos = segments.find(delimiter)) != string::npos) {
                 token = segments.substr(0, pos);
                 segment_array.push_back(stoi(token));
+                free_segments.erase(free_segments.begin()+stoi(token));
                 segments.erase(0, pos + delimiter.length());
             }
             segment_array.push_back(stoi(segments));
-
+            
 
 
             data.insert(pair<string,vetor<int>>(entry,segment_array));
         }
 
+
+        this->free_segments = free_segments;
+        this->total_file_entries = file_count;
         this->set_file_metadata(data);
         this->set_seg_sequence(*max_element(segment_array.begin(), segment_array.end()));
 
@@ -95,13 +105,13 @@ Disk::Disk(int meta_data_limit){
 
 int Disk::create(File new_file){
     map<string,vector<int>> metadata = this->get_file_metadata;
-    int segment_number = this->get_seg_sequence();
+    int segment_number = this-free_segments[0];
 
  
     fstream fout;
     fout.open("file_system.txt");
     
-    string text = new_file.get_data();
+    string text = new_file.get_data(),new_metadata = "";
 
     vector<string> splits;
 
@@ -118,7 +128,23 @@ int Disk::create(File new_file){
         splits.push_back(text);
     }
 
+    map<string, vector<int>>::iterator itr; 
+    for (itr = metadata.begin(); itr != metadata.end(); ++itr) { 
+        string sfile_segments;
+        ostringstream out;
+
+        if (!itr->second.empty())
+        {
+            copy(itr->second.begin(), itr->second.end() - 1,ostream_iterator<int>(out, ";"));
+            out << itr->second.back();
+        }
+
+
+        new_metadata += (itr->first + out.str);
+    }
     
+    fout << new_metadata;
+
     if(segment_number == 0){
         seekg(1000);
     } else {
@@ -133,7 +159,25 @@ int Disk::create(File new_file){
     return 1;
 }
 
-Disk::del(string fname){
+void Disk::del(string fname){
+    map<string,vector<int>> metadata = this->get_file_metadata();
+    auto file = metadata.find(fname);
+    vector<int> file_segments;
+    string
+
+    if(file != metadata.end()){
+        file_segments = file->second;
+    }
+
+    for(auto i = file_segments.begin(); i != file_segments.end(); ++i){
+        
+    }
+
+    file.erase(file);
+
+        
+
+
 
 }
 
