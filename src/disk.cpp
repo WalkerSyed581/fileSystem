@@ -1,14 +1,15 @@
+#include <cstdlib>
 #include <iostream>
+#include <algorithm>
 #include <string>
 #include <sstream>
 #include <iterator>
 #include <map>
 #include <fstream> 
-#include <stringstream>
+#include <sstream>
 #include <vector>
 
 #include "disk.h"
-#include "../include/filesystem/file.h"
 
 using namespace std;
 
@@ -20,10 +21,7 @@ Metadata Entry: \n
 File Info Element: &
 Segment Separator: ,
 FileSystem Starts After: |
-FilesSeparator: \n
-
-
-*/
+FilesSeparator: \n*/
 
 
 
@@ -31,28 +29,37 @@ map<string,vector<int>> Disk::get_file_metadata(){
     return this->file_info;
 }
 
-void Disk::set_file_metadata(map<string,vector<int>> data){
+string Disk::set_file_metadata(map<string,vector<int>> data){
     this->file_info = data;
-}
+    string new_metadata = "";
+    map<string, vector<int>>::iterator itr; 
+    for (itr = data.begin(); itr != data.end(); ++itr) { 
+        string sfile_segments;
+        ostringstream out;
+
+        if (!itr->second.empty())
+        {
+            copy(itr->second.begin(), itr->second.end() - 1,ostream_iterator<int>(out, ";"));
+            out << itr->second.back();
+        }
 
 
-int Disk::get_seg_sequence(){
-    return this->seg_sequence;
-}
+        new_metadata += (itr->first +"&" +out.str()+"\n");
+    }
+    new_metadata.resize(1001);
+    new_metadata[1000] = '|';
 
-void Disk::set_file_metadata(int seg_sequence){
-    this->seg_sequence = seg_sequence;
+    return new_metadata;
 }
- 
 
 //Done not tested
 Disk::Disk(int meta_data_limit){
     this->meta_data_limit = meta_data_limit;
     map<string,vector<int>> data;
-    vector<int> free_segments;
+    vector<int> hello;
     fstream fin("file_system.txt",ios::in);
     fstream fout;
-    string metadata,field,entry,segments;
+    string metadata,field;
     int file_count = 0;
     
     for(int i = 0;i < 90;i++){
@@ -63,21 +70,27 @@ Disk::Disk(int meta_data_limit){
     if (fin.fail()) {
         fout.open("file_system.txt"); 
         this->set_file_metadata(data);
-        this->set_seg_sequence(0);
     } else {
 
-        getline(fin,metdata,'|');
+        getline(fin,metadata,'|');
 
         stringstream buffer(metadata);
+        vector<int> segment_array;
+
 
         while(getline(buffer, field, '\n')){
-            file_count += 1;
-            getline(field,entry,'&');
 
-            getline(field,segments,'&');
+            string entry ="",segments="";
+
+            file_count += 1;
+
+            stringstream field_buffer(field);
+
+            getline(field_buffer,entry,'&');
+
+            getline(field_buffer,segments,'&');
 
             size_t pos = 0;
-            vector<int> segment_array;
             string token;
             string delimiter = ",";
             while ((pos = segments.find(delimiter)) != string::npos) {
@@ -90,22 +103,20 @@ Disk::Disk(int meta_data_limit){
             
 
 
-            data.insert(pair<string,vetor<int>>(entry,segment_array));
+            data.insert(pair<string,vector<int>>(entry,segment_array));
         }
 
-
+        sort(free_segments.begin(), free_segments.end()); 
         this->free_segments = free_segments;
         this->total_file_entries = file_count;
         this->set_file_metadata(data);
-        this->set_seg_sequence(*max_element(segment_array.begin(), segment_array.end()));
 
 
     }
 }
 
 int Disk::create(File new_file){
-    map<string,vector<int>> metadata = this->get_file_metadata;
-    int segment_number = this-free_segments[0];
+    map<string,vector<int>> metadata = this->get_file_metadata();
 
  
     fstream fout;
@@ -114,6 +125,7 @@ int Disk::create(File new_file){
     string text = new_file.get_data(),new_metadata = "";
 
     vector<string> splits;
+    vector<int> file_segments;
 
     size_t file_length = text.length();
     if(file_length > 100){
@@ -123,75 +135,66 @@ int Disk::create(File new_file){
             } else {
                 splits.push_back(text.substr(i,100));
             }
+            file_segments.push_back(free_segments[0]);
+            free_segments.erase(free_segments.begin());
         };
     } else {
         splits.push_back(text);
+        file_segments.push_back(free_segments[0]);
+        free_segments.erase(free_segments.begin());
     }
 
-    map<string, vector<int>>::iterator itr; 
-    for (itr = metadata.begin(); itr != metadata.end(); ++itr) { 
-        string sfile_segments;
-        ostringstream out;
+    this->free_segments = free_segments;
+    metadata.insert(pair<string,vector<int>>(new_file.name,file_segments));
 
-        if (!itr->second.empty())
-        {
-            copy(itr->second.begin(), itr->second.end() - 1,ostream_iterator<int>(out, ";"));
-            out << itr->second.back();
-        }
+    new_metadata = this->set_file_metadata(metadata);
 
-
-        new_metadata += (itr->first + out.str);
-    }
-    
     fout << new_metadata;
 
-    if(segment_number == 0){
-        seekg(1000);
-    } else {
-        seekg(1000 + (segment_number * 101));
+    for (auto i = file_segments.begin(); i != file_segments.end(); ++i){
+        fout.seekg(1001 + ((*i) * 101));
+        string curr_string  = splits[0];
+        curr_string.resize(100);
+        fout << (curr_string + '\n');
+        splits.erase(splits.begin());
     }
 
-    for (auto i = splits.begin(); i != splits.end(); ++i){
-        splits[i].resize(100);
-        fout << (splits[i] + '\n');
-    }
 
     return 1;
 }
 
 void Disk::del(string fname){
     map<string,vector<int>> metadata = this->get_file_metadata();
+    vector<int> free_segments = this->free_segments;
     auto file = metadata.find(fname);
     vector<int> file_segments;
-    string
 
     if(file != metadata.end()){
         file_segments = file->second;
     }
 
-    for(auto i = file_segments.begin(); i != file_segments.end(); ++i){
-        
-    }
+    free_segments.insert( free_segments.end(), file_segments.begin(), file_segments.end() );
+    sort(free_segments.begin(), free_segments.end()); 
 
-    file.erase(file);
+    metadata.erase(fname);
 
-        
-
-
-
-}
-
-Disk::open(string fname,int mode){
-
-}
-
-Disk::close(string fname){
-
-}
-
-Disk::memMap(){
     
+    this->set_file_metadata(metadata);
 }
+
+
+
+File Disk::open(string fname,int mode){
+
+}
+
+// Disk::close(string fname){
+
+// }
+
+// Disk::memMap(){
+    
+// }
 
 
 
