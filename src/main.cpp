@@ -12,6 +12,10 @@ int main(int arc,char * argv[]){
     filesystem.memory_map();
 
     while(sentinel >= 0){
-        
+        //Check file Existence for File Name
+
+        //Implement Delete File Existence Check
+
+
     }
 }

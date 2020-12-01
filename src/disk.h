@@ -20,11 +20,12 @@ class Disk {
         static int total_file_entries;
         static vector<int> free_segments;
 
+        //Getters & Setters
         map<string,vector<int>> get_file_metadata();    
         string set_file_metadata(map<string,vector<int>> data);  
-
-        void create(string fname);
-        void del(string fname);
+        int move(string source_fname,string target_fname);
+        int create(string fname);
+        int del(string fname);
         File open(string fname,int mode);
         void memory_map();
         void close(string fname);
