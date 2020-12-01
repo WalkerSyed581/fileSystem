@@ -9,7 +9,7 @@ using namespace std;
 
 class Disk {
     private:
-        map<string,vector<int>> file_info;
+        map<string,vector<int>> metadata;
         int meta_data_limit;
 
     public:
@@ -24,6 +24,6 @@ class Disk {
         int create(File new_file);
         void del(string fname);
         File open(string fname,int mode);
-
+        void memory_map();
 
 };

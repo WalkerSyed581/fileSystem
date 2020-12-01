@@ -7,6 +7,7 @@ class File {
         string data;
     
     public:
+        File(string data,string name);
         string name;
         string get_data();
 };
