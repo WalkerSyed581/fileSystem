@@ -1,12 +1,14 @@
+#ifndef DISK_H
+#define DISK_H
+#include <memory>
 #include <string>
 #include <map>
 #include <vector>
-#include "../include/filesystem/file.h"
 
 
 using namespace std;
 
-
+class File;
 class Disk {
     private:
         map<string,vector<int>> metadata;
@@ -21,9 +23,11 @@ class Disk {
         map<string,vector<int>> get_file_metadata();    
         string set_file_metadata(map<string,vector<int>> data);  
 
-        int create(File new_file);
+        void create(string fname);
         void del(string fname);
         File open(string fname,int mode);
         void memory_map();
+        void close(string fname);
 
 };
+#endif

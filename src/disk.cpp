@@ -1,3 +1,4 @@
+
 #include <cstdlib>
 #include <iostream>
 #include <algorithm>
@@ -10,6 +11,7 @@
 #include <vector>
 
 #include "disk.h"
+#include "../include/filesystem/file.h"
 
 using namespace std;
 
@@ -115,52 +117,20 @@ Disk::Disk(int meta_data_limit){
     }
 }
 
-int Disk::create(File new_file){
+void Disk::create(string fname){
     map<string,vector<int>> metadata = this->get_file_metadata();
-
  
     fstream fout;
     fout.open("../file_system.txt");
     
-    string text = new_file.get_data(),new_metadata = "";
-
-    vector<string> splits;
+    string new_metadata = "";
     vector<int> file_segments;
 
-    size_t file_length = text.length();
-    if(file_length > 100){
-        for (unsigned i = 0; i < file_length; i += 100) {
-            if(file_length % 100 != 0 && i > (file_length - 100)){
-                splits.push_back(text.substr(i,file_length % 100));
-            } else {
-                splits.push_back(text.substr(i,100));
-            }
-            file_segments.push_back(free_segments[0]);
-            free_segments.erase(free_segments.begin());
-        };
-    } else {
-        splits.push_back(text);
-        file_segments.push_back(free_segments[0]);
-        free_segments.erase(free_segments.begin());
-    }
-
-    this->free_segments = free_segments;
-    metadata.insert(pair<string,vector<int>>(new_file.name,file_segments));
+    metadata.insert(pair<string,vector<int>>(fname,file_segments));
 
     new_metadata = this->set_file_metadata(metadata);
 
     fout << new_metadata;
-
-    for (auto i = file_segments.begin(); i != file_segments.end(); ++i){
-        fout.seekg(1001 + ((*i) * 101));
-        string curr_string  = splits[0];
-        curr_string.resize(100);
-        fout << (curr_string + '\n');
-        splits.erase(splits.begin());
-    }
-
-
-    return 1;
 }
 
 void Disk::del(string fname){
@@ -205,12 +175,16 @@ File Disk::open(string fname,int mode){
         contents += buffer;
     }
     
-    File req_file = File(contents,fname);
+    File req_file = File(fname);
+    req_file.set_data(contents);
 
     return req_file;
 
 }
 
+void Disk::close(string fname){
+
+}
 
 void Disk::memory_map(){
 
