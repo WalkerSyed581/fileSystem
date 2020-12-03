@@ -45,15 +45,15 @@ string Disk::set_file_metadata(map<string,vector<int>> data){
         }
 
 
-        new_metadata += (itr->first +"&" +out.str()+"\n");
+        new_metadata += (itr->first +"&" +out.str()+",\n");
     }
     if(new_metadata.length() > this->meta_data_limit){
         return "-1";
     }
     this->metadata = data;
+    new_metadata.push_back('|');
 
     new_metadata.resize(1001);
-    new_metadata[1000] = '|';
 
     return new_metadata;
 }
@@ -64,7 +64,7 @@ Disk::Disk(int meta_data_limit){
     map<string,vector<int>> data;
     vector<int> free_segments;
     fstream fin("../file_system.txt",ios::in);
-    fstream fout;
+    ofstream fout;
     string metadata,field;
     int file_count = 0;
     
@@ -74,19 +74,20 @@ Disk::Disk(int meta_data_limit){
 
 
     if (fin.fail()) {
-        fout.open("../file_system.txt"); 
+        fout.open("../file_system.txt",ios::app); 
         this->set_file_metadata(data);
         this->free_segments = free_segments;
         this->total_file_entries = 0;
 
-    } else {
+    } else  {
 
         getline(fin,metadata,'|');
 
         stringstream buffer(metadata);
 
 
-        while(getline(buffer, field, '\n')){
+
+        while(getline(buffer, field, '\n') && metadata.length() > 0){
             vector<int> segment_array = {};
 
             string entry ="",segments="";
@@ -104,11 +105,13 @@ Disk::Disk(int meta_data_limit){
             string delimiter = ",";
             while ((pos = segments.find(delimiter)) != string::npos) {
                 token = segments.substr(0, pos);
+                if(token.empty()){
+                    break;
+                }
                 segment_array.push_back(stoi(token));
                 free_segments.erase(free_segments.begin()+stoi(token));
                 segments.erase(0, pos + delimiter.length());
             }
-            segment_array.push_back(stoi(segments));
             
 
 
@@ -119,7 +122,7 @@ Disk::Disk(int meta_data_limit){
         this->free_segments = free_segments;
         this->total_file_entries = file_count;
         string new_metadata = this->set_file_metadata(data);
-        if(new_metadata != "-1"){
+        if(new_metadata != "-1" && metadata.empty() != 0){
             fstream fout;
             fout.open("../file_system.txt");
 
@@ -152,23 +155,6 @@ int Disk::create(string fname){
     }
 }
 
-/*int Disk::move(string source_fname,string dest_fname){
-    auto source_file = this->metadata.find(source_fname);
-    auto dest_file = this->metadata.find(dest_fname);
-    vector<int> source_segments = source_file->second;
-
-    if(dest_file == this->metadata.end()){
-        this->create(dest_fname);
-
-        dest_file = this->metadata.find(dest_fname);
-        dest_file->second = 
-    } else {
-
-    }
-
-
-}*/
-
 int Disk::del(string fname){
     map<string,vector<int>> metadata = this->get_file_metadata();
     vector<int> free_segments = this->free_segments;
@@ -200,7 +186,7 @@ int Disk::del(string fname){
 
 
 
-File Disk::open(string fname,int mode){
+File Disk::open(string fname){
     auto file_data = this->metadata.find(fname);
     vector<int> file_segments;
     if(file_data != this->metadata.end()){
@@ -226,24 +212,27 @@ File Disk::open(string fname,int mode){
 }
 
 void Disk::close(string fname){
-    cout << "Closing File";
+    cout << "Closing File: " + fname;
 }
 
 
 
 void Disk::memory_map(){
+    if(!metadata.empty()){
+        map<string, vector<int>>::iterator itr; 
+        for (itr = this->metadata.begin(); itr != this->metadata.end(); ++itr) { 
+            ostringstream out;
 
-    map<string, vector<int>>::iterator itr; 
-    for (itr = this->metadata.begin(); itr != this->metadata.end(); ++itr) { 
-        ostringstream out;
+            if (!itr->second.empty()){
+                copy(itr->second.begin(), itr->second.end() - 1,ostream_iterator<int>(out, ";"));
+                out << itr->second.back();
+            }
 
-        if (!itr->second.empty()){
-            copy(itr->second.begin(), itr->second.end() - 1,ostream_iterator<int>(out, ";"));
-            out << itr->second.back();
-        }
-
-        cout << "|\n|---- " + itr->first + ", Segments -> " + out.str() + "\n";
-    } 
+            cout << "|\n|---- " + itr->first + ", Segments -> " + out.str() + "\n|";
+        } 
+    } else {
+        cout << "No file found"<<endl;
+    }
 }
 
 

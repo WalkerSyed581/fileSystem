@@ -50,3 +50,5 @@ This function was not implemented because of a lethargy at the part of the coder
 - FileStorage: |
 - FilesSeparator: \n
 
+GitHub Link: https://github.com/WalkerSyed581/fileSystem
+

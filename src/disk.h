@@ -17,8 +17,8 @@ class Disk {
     public:
         //Variables and Constructors
         Disk(int meta_data_limit);
-        static int total_file_entries;
-        static vector<int> free_segments;
+        int total_file_entries;
+        vector<int> free_segments;
 
         //Getters & Setters
         map<string,vector<int>> get_file_metadata();    
@@ -26,7 +26,7 @@ class Disk {
         int move(string source_fname,string target_fname);
         int create(string fname);
         int del(string fname);
-        File open(string fname,int mode);
+        File open(string fname);
         void memory_map();
         void close(string fname);
 
