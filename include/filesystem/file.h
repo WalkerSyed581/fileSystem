@@ -12,6 +12,7 @@ class File {
     public:
         File(string name);
         string name;
+        
         string get_data();
         void set_data(string data);
 

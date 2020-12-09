@@ -42,7 +42,7 @@ int File::write_to_file(Disk& disk,string text){
                 }
                 file_segments.push_back(free_segments[0]);
                 free_segments.erase(free_segments.begin());
-            };
+            }
         } else {
             splits.push_back(text);
             file_segments.push_back(free_segments[0]);
@@ -90,19 +90,16 @@ int File::write_to_file(Disk& disk,int write_at,string text){
     vector<int> free_segments = disk.free_segments;
     vector<string> splits;
     string curr_text = this->get_data();
-    string new_text = curr_text.insert(write_at,text);
+    string new_text = this->get_data().insert(write_at,text);
+    new_text.resize(write_at+ text.length());
 
     int segment_number = write_at/100;
 
 
-    cout << "Hello1"<<endl;
     for(auto i = (segment_number == 0 ? file_segments.begin() :  file_segments.begin() + segment_number); i != file_segments.end();++i){
         free_segments.push_back(*i);
-        file_segments.erase(i);
-        if(file_segments.size() == 0){
-            break;
-        }
     } 
+    file_segments.erase(file_segments.begin() + segment_number,file_segments.end());
     sort(free_segments.begin(),free_segments.end());
 
     if(free_segments.size() * 100 <  new_text.length()){

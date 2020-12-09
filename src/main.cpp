@@ -147,8 +147,8 @@ int main(int arc,char * argv[]){
                         cin.clear();
                         fflush(stdin);
                         getline(cin,buffer,'\n');
-                        pos = stoi(buffer);
                         cin.clear();
+                        pos = stoi(buffer);
                         if(pos > file.get_data().length()){
                             cout << "\nError: Invalid value\n";
                             continue;
@@ -157,6 +157,7 @@ int main(int arc,char * argv[]){
                         cin.clear();
                         fflush(stdin);
                         getline(cin,text,'\n');
+                        cin.clear();
                         int result = file.write_to_file(filesystem,pos,text);
                         if(result != 0){
                             cout << "\nError: Hard Disk is Full\n";

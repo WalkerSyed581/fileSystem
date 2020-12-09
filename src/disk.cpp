@@ -40,12 +40,12 @@ string Disk::set_file_metadata(map<string,vector<int>> data){
 
         if (!itr->second.empty())
         {
-            copy(itr->second.begin(), itr->second.end() - 1,ostream_iterator<int>(out, ";"));
+            copy(itr->second.begin(), itr->second.end() - 1,ostream_iterator<int>(out, ","));
             out << itr->second.back();
         }
 
 
-        new_metadata += (itr->first +"&" +out.str()+",\n");
+        new_metadata += (itr->first +"&" +out.str()+",&\n");
     }
     if(new_metadata.length() > this->meta_data_limit){
         return "-1";
@@ -62,21 +62,23 @@ string Disk::set_file_metadata(map<string,vector<int>> data){
 Disk::Disk(int meta_data_limit){
     this->meta_data_limit = meta_data_limit;
     map<string,vector<int>> data;
-    vector<int> free_segments;
+    vector<int> occupied_segments,free_segments,total_segments;
     fstream fin("../file_system.txt",ios::in);
     ofstream fout;
     string metadata,field;
     int file_count = 0;
     
     for(int i = 0;i < 90;i++){
-        free_segments.push_back(i);
+        total_segments.push_back(i);
     }
 
 
     if (fin.fail()) {
+
+        
         fout.open("../file_system.txt",ios::app); 
         this->set_file_metadata(data);
-        this->free_segments = free_segments;
+        this->free_segments = total_segments;
         this->total_file_entries = 0;
 
     } else  {
@@ -109,14 +111,26 @@ Disk::Disk(int meta_data_limit){
                     break;
                 }
                 segment_array.push_back(stoi(token));
-                free_segments.erase(free_segments.begin()+stoi(token));
+                occupied_segments.push_back(stoi(token));
                 segments.erase(0, pos + delimiter.length());
+                cout << "Occupied Segment: " << occupied_segments.back() << endl;
+
             }
             
 
-
             data.insert(pair<string,vector<int>>(entry,segment_array));
         }
+
+        
+        sort(total_segments.begin(), total_segments.end());
+        sort(occupied_segments.begin(), occupied_segments.end());
+
+        set_symmetric_difference(total_segments.begin(), total_segments.end(), 
+                                occupied_segments.begin(), occupied_segments.end(), 
+                                    back_inserter(free_segments));
+        
+        cout << "First Free Segment: " << *(free_segments.begin()) << endl;
+                            
 
         sort(free_segments.begin(), free_segments.end()); 
         this->free_segments = free_segments;
@@ -224,7 +238,7 @@ void Disk::memory_map(){
             ostringstream out;
 
             if (!itr->second.empty()){
-                copy(itr->second.begin(), itr->second.end() - 1,ostream_iterator<int>(out, ";"));
+                copy(itr->second.begin(), itr->second.end() - 1,ostream_iterator<int>(out, ","));
                 out << itr->second.back();
             }
 
