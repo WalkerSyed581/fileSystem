@@ -26,6 +26,50 @@ FileSystem Starts After: |
 FilesSeparator: \n*/
 
 
+map<string,pair<vector<string>,vector<int>>> Disk::get_dir_metadata(){
+    return this->dir_metadata;
+}   
+
+
+string Disk::set_dir_metadata(map<string,pair<vector<string>,vector<int>>> data){
+    string new_dir_metadata = "";
+    map<string,pair<vector<string>,vector<int>>>::iterator itr; 
+    for (itr = data.begin(); itr != data.end(); ++itr) { 
+        string sfile_segments;
+        ostringstream out;
+        vector<string> dirs;
+        vector<int> files;
+
+
+        if (!itr->second.first.empty()){
+            dirs = itr->second.first;
+            copy(dirs.begin(), dirs.end() - 1,ostream_iterator<int>(out, ","));
+            out << dirs.back();
+        }
+
+        out << ",&";
+
+        if(!itr->second.second.empty()){
+            files = itr->second.second;
+            copy(files.begin(), files.end() - 1,ostream_iterator<int>(out, ","));
+            out << files.back();
+        }
+
+
+        new_dir_metadata += (itr->first +"&" +out.str()+",&\n");
+    }
+    if(new_dir_metadata.length() > this->meta_data_limit){
+        return "-1";
+    }
+    this->dir_metadata = data;
+    new_dir_metadata.push_back('|');
+
+    new_dir_metadata.resize(1001);
+
+    return new_dir_metadata;
+}
+
+
 
 map<string,vector<int>> Disk::get_file_metadata(){
     return this->metadata;
@@ -62,10 +106,11 @@ string Disk::set_file_metadata(map<string,vector<int>> data){
 Disk::Disk(int meta_data_limit){
     this->meta_data_limit = meta_data_limit;
     map<string,vector<int>> data;
+    map<string,pair<vector<string>,vector<int>>> dir_metadata;
     vector<int> occupied_segments,free_segments,total_segments;
     fstream fin("../file_system.txt",ios::in);
     ofstream fout;
-    string metadata,field;
+    string metadata,field,s_dir_metadata;
     int file_count = 0;
     
     for(int i = 0;i < 90;i++){
@@ -78,16 +123,13 @@ Disk::Disk(int meta_data_limit){
         
         fout.open("../file_system.txt",ios::app); 
         this->set_file_metadata(data);
+        this->dir_metadata = dir_metadata;
         this->free_segments = total_segments;
-        this->total_file_entries = 0;
 
     } else  {
-
         getline(fin,metadata,'|');
 
         stringstream buffer(metadata);
-
-
 
         while(getline(buffer, field, '\n') && metadata.length() > 0){
             vector<int> segment_array = {};
@@ -113,7 +155,6 @@ Disk::Disk(int meta_data_limit){
                 segment_array.push_back(stoi(token));
                 occupied_segments.push_back(stoi(token));
                 segments.erase(0, pos + delimiter.length());
-                cout << "Occupied Segment: " << occupied_segments.back() << endl;
 
             }
             
@@ -122,6 +163,56 @@ Disk::Disk(int meta_data_limit){
         }
 
         
+        getline(fin,s_dir_metadata,'|');
+
+        stringstream dir_buffer(s_dir_metadata);
+
+        while(getline(dir_buffer, field, '\n') && metadata.length() > 0){
+            vector<int> file_array = {};
+            vector<string> dir_array = {};
+
+            string entry ="",dirs="",files="";
+
+
+            stringstream field_buffer(field);
+
+            getline(field_buffer,entry,'&');
+
+            getline(field_buffer,dirs,'&');
+
+            getline(field_buffer,files,'&');
+
+
+            size_t pos = 0;
+            string token;
+            string delimiter = ",";
+            while ((pos = dirs.find(delimiter)) != string::npos) {
+                token = dirs.substr(0, pos);
+                if(token.empty()){
+                    break;
+                }
+                dir_array.push_back(token);
+                dirs.erase(0, pos + delimiter.length());
+            }
+
+            while ((pos = files.find(delimiter)) != string::npos) {
+                token = files.substr(0, pos);
+                if(token.empty()){
+                    break;
+                }
+                file_array.push_back(stoi(token));
+                dirs.erase(0, pos + delimiter.length());
+            }
+            
+            pair<vector<string>,vector<int>> value(dir_array,file_array);
+            dir_metadata.insert(pair<string,pair<vector<string>,vector<int>>>(entry,value));
+        }
+
+
+
+
+
+
         sort(total_segments.begin(), total_segments.end());
         sort(occupied_segments.begin(), occupied_segments.end());
 
@@ -134,22 +225,19 @@ Disk::Disk(int meta_data_limit){
 
         sort(free_segments.begin(), free_segments.end()); 
         this->free_segments = free_segments;
-        this->total_file_entries = file_count;
-        string new_metadata = this->set_file_metadata(data);
-        if(new_metadata != "-1" && metadata.empty() != 0){
-            fstream fout;
-            fout.open("../file_system.txt");
+        this->metadata = data;
+        this->dir_metadata = dir_metadata;
+        // string new_metadata = this->set_file_metadata(data);
+        // if(new_metadata != "-1" && metadata.empty() != 0){
+        //     fstream fout;
+        //     fout.open("../file_system.txt");
 
-            fout << new_metadata;
-        }
-        
+        //     fout << new_metadata;
+        // }
     }
 }
 
 int Disk::create(string fname){
-    if(this->total_file_entries >= 89){
-        return -2;
-    }
     map<string,vector<int>> metadata = this->get_file_metadata();
  
     fstream fout;

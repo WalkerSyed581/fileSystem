@@ -18,7 +18,6 @@ class Disk {
     public:
         //Variables and Constructors
         Disk(int meta_data_limit);
-        int total_file_entries;
         vector<int> free_segments;
 
         //Getters & Setters
@@ -28,8 +27,12 @@ class Disk {
         map<string,pair<vector<string>,vector<int>>> get_dir_metadata();    
         string set_dir_metadata(map<string,pair<vector<string>,vector<int>>> data);  
 
-        
+        //To Be Implemented
+        void mkdir(string dirname);
+        void chdir(string path);
         int move(string source_fname,string target_fname);
+
+        //Done
         int create(string fname);
         int del(string fname);
         File open(string fname);
