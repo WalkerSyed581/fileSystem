@@ -20,7 +20,7 @@ File::File(string name){
 
 int File::write_to_file(Disk& disk,string text){
     vector<int> free_segments = disk.free_segments;
-    map<string,vector<int>> metadata = disk.get_file_metadata();
+    multimap<string,vector<int>> metadata = disk.get_file_metadata();
     vector<string> splits;
     auto file_data = metadata.find(this->name);
     vector<int> file_segments;
@@ -80,7 +80,7 @@ int File::write_to_file(Disk& disk,string text){
 }
 
 int File::write_to_file(Disk& disk,int write_at,string text){
-    map<string,vector<int>> metadata = disk.get_file_metadata();
+    multimap<string,vector<int>> metadata = disk.get_file_metadata();
     auto file_data = metadata.find(this->name);
     vector<int> file_segments;
     if(file_data != metadata.end()){
@@ -160,7 +160,7 @@ string File::read_from_file(int start,int size){
 }
 
 int File::truncate_file(Disk& disk,int max_size){
-    map<string,vector<int>> metadata = disk.get_file_metadata();
+    multimap<string,vector<int>> metadata = disk.get_file_metadata();
     auto file_data = metadata.find(this->name);
     vector<int> file_segments;
     if(file_data != metadata.end()){

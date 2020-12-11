@@ -26,14 +26,14 @@ FileSystem Starts After: |
 FilesSeparator: \n*/
 
 
-map<string,pair<vector<string>,vector<int>>> Disk::get_dir_metadata(){
+multimap<string,pair<vector<string>,vector<int>>> Disk::get_dir_metadata(){
     return this->dir_metadata;
 }   
 
 
-string Disk::set_dir_metadata(map<string,pair<vector<string>,vector<int>>> data){
+string Disk::set_dir_metadata(multimap<string,pair<vector<string>,vector<int>>> data){
     string new_dir_metadata = "";
-    map<string,pair<vector<string>,vector<int>>>::iterator itr; 
+    multimap<string,pair<vector<string>,vector<int>>>::iterator itr; 
     for (itr = data.begin(); itr != data.end(); ++itr) { 
         string sfile_segments;
         ostringstream out;
@@ -71,13 +71,13 @@ string Disk::set_dir_metadata(map<string,pair<vector<string>,vector<int>>> data)
 
 
 
-map<string,vector<int>> Disk::get_file_metadata(){
+multimap<string,vector<int>> Disk::get_file_metadata(){
     return this->metadata;
 }
 
-string Disk::set_file_metadata(map<string,vector<int>> data){
+string Disk::set_file_metadata(multimap<string,vector<int>> data){
     string new_metadata = "";
-    map<string, vector<int>>::iterator itr; 
+    multimap<string, vector<int>>::iterator itr; 
     for (itr = data.begin(); itr != data.end(); ++itr) { 
         string sfile_segments;
         ostringstream out;
@@ -105,8 +105,8 @@ string Disk::set_file_metadata(map<string,vector<int>> data){
 //Done not tested
 Disk::Disk(int meta_data_limit){
     this->meta_data_limit = meta_data_limit;
-    map<string,vector<int>> data;
-    map<string,pair<vector<string>,vector<int>>> dir_metadata;
+    multimap<string,vector<int>> data;
+    multimap<string,pair<vector<string>,vector<int>>> dir_metadata;
     vector<int> occupied_segments,free_segments,total_segments;
     fstream fin("../file_system.txt",ios::in);
     ofstream fout;
@@ -124,9 +124,12 @@ Disk::Disk(int meta_data_limit){
         fout.open("../file_system.txt",ios::app); 
         this->set_file_metadata(data);
         this->dir_metadata = dir_metadata;
+        this->total_files = 0;
         this->free_segments = total_segments;
 
     } else  {
+
+        //Attempting to read the file metadata
         getline(fin,metadata,'|');
 
         stringstream buffer(metadata);
@@ -162,7 +165,7 @@ Disk::Disk(int meta_data_limit){
             data.insert(pair<string,vector<int>>(entry,segment_array));
         }
 
-        
+        //Attempting to read the folder metadata        
         getline(fin,s_dir_metadata,'|');
 
         stringstream dir_buffer(s_dir_metadata);
@@ -212,21 +215,23 @@ Disk::Disk(int meta_data_limit){
 
 
 
-
+        //Tinkering out the free segments from the occupied one
         sort(total_segments.begin(), total_segments.end());
         sort(occupied_segments.begin(), occupied_segments.end());
 
         set_symmetric_difference(total_segments.begin(), total_segments.end(), 
                                 occupied_segments.begin(), occupied_segments.end(), 
                                     back_inserter(free_segments));
-        
-        cout << "First Free Segment: " << *(free_segments.begin()) << endl;
-                            
-
         sort(free_segments.begin(), free_segments.end()); 
+
+        //Setting values
         this->free_segments = free_segments;
         this->metadata = data;
         this->dir_metadata = dir_metadata;
+        this->total_files = 0;
+
+
+        // Commented out writing back to the file
         // string new_metadata = this->set_file_metadata(data);
         // if(new_metadata != "-1" && metadata.empty() != 0){
         //     fstream fout;
@@ -238,7 +243,23 @@ Disk::Disk(int meta_data_limit){
 }
 
 int Disk::create(string fname){
-    map<string,vector<int>> metadata = this->get_file_metadata();
+    multimap<string,vector<int>> metadata = this->get_file_metadata();
+    multimap<string,pair<vector<string>,vector<int>>> dir_metadata =this->get_dir_metadata();
+
+    
+    size_t pos = 0;
+    vector<string> dir_list;
+    string token;
+    string delimiter = "/";
+    while ((pos = fname.find(delimiter)) != string::npos) {
+        token = fname.substr(0, pos);
+        if(token.empty()){
+            break;
+        }
+        dir_list.push_back(token);
+        fname.erase(0,pos + delimiter.size());
+    }
+
  
     fstream fout;
     fout.open("../file_system.txt");
@@ -248,9 +269,28 @@ int Disk::create(string fname){
 
     metadata.insert(pair<string,vector<int>>(fname,file_segments));
 
+    this->total_files += 1;
+
+
     new_metadata = this->set_file_metadata(metadata);
     if(new_metadata != "-1"){
         fout << new_metadata;
+        map<string,pair<vector<string>,vector<int>>>::iterator dir = dir_metadata.begin();
+        for(auto i = dir_list.begin();i != dir_list.end();++i){
+            auto cur_dir = find(dir,dir_metadata.end(),*i);
+            if(i+1 != dir_list.end() &&
+                find(cur_dir->second.first.begin(),cur_dir->second.first.end(),*(i+1)) != cur_dir->second.first.end()){
+                dir = find(dir,dir_metadata.end(),*(i+1));
+            } else {
+                dir = cur_dir;
+                break;
+            }
+        }
+
+        dir->second.second.push_back(this->total_files);
+
+        string s_dir_metadata = this->set_dir_metadata(dir_metadata);
+
         return 0;
     } else {
         return -1;
@@ -258,7 +298,7 @@ int Disk::create(string fname){
 }
 
 int Disk::del(string fname){
-    map<string,vector<int>> metadata = this->get_file_metadata();
+    multimap<string,vector<int>> metadata = this->get_file_metadata();
     vector<int> free_segments = this->free_segments;
     auto file = metadata.find(fname);
     vector<int> file_segments;
@@ -278,6 +318,7 @@ int Disk::del(string fname){
     if(new_metadata != "-1"){
         fstream fout;
         fout.open("../file_system.txt");
+
 
         fout << new_metadata;
         return 0;
@@ -321,7 +362,7 @@ void Disk::close(string fname){
 
 void Disk::memory_map(){
     if(!metadata.empty()){
-        map<string, vector<int>>::iterator itr; 
+        multimap<string, vector<int>>::iterator itr; 
         for (itr = this->metadata.begin(); itr != this->metadata.end(); ++itr) { 
             ostringstream out;
 

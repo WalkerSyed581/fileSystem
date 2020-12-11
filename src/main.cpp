@@ -32,7 +32,7 @@ int main(int arc,char * argv[]){
 
     while(sentinel != "-1"){
         string fname;
-        map<string,vector<int>> metadata = filesystem.get_file_metadata();
+        multimap<string,vector<int>> metadata = filesystem.get_file_metadata();
 
 
         cout << "Enter the number written corresponding to the action to move further"<<endl;
