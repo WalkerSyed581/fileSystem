@@ -34,6 +34,7 @@ int main(int arc,char * argv[]){
     while(sentinel != "-1"){
         string fname;
         multimap<int,pair<string,vector<int>>> metadata = filesystem.get_file_metadata();
+        multimap<string,pair<vector<string>,vector<int>>> dir_metadata = filesystem.get_dir_metadata();
         multimap<string,pair<vector<string>,vector<int>>>::iterator curr_dir = filesystem.chdir("root/");
 
 
@@ -63,17 +64,19 @@ int main(int arc,char * argv[]){
                 cout << "\nError: Invalid File Name"<<endl;
                 continue;
             }
-            auto file = metadata.find(fname);
-            if(file == metadata.end()){
-                int result = filesystem.create(fname);
-                if(result == -2 || result == -1){
-                    cout <<"\nError: Hard Disk is full\n";
-                }
-            } else {
-                cout << "\nError: File name already exists\n";
-                continue;
+            vector<int> curr_dir_files = curr_dir->second.second;
+            multimap<int,pair<string,vector<int>>>::iterator file;
+            for(auto i = curr_dir_files.begin();i != curr_dir_files.end();i++){
+                file = metadata.find(*i);
+                if(file->second.first == fname){
+                    cout << "\nError: File name already exists\n";
+                } 
             }
-            
+            fname = filesystem.path + fname;
+            int result = filesystem.create(fname);
+            if(result == -1){
+                cout <<"\nError: Hard Disk is full\n";
+            }
         } else if (sentinel == "2"){
             // Delete File
             cout << "Enter file name (Invalid Characters : |,& or a comma): ";
@@ -84,16 +87,22 @@ int main(int arc,char * argv[]){
                 cout << "\nError: Invalid File Name"<<endl;
                 continue;
             }
-            auto file = metadata.find(fname);
-            
-            if(file != metadata.end()){
-                int result = filesystem.del(fname);
-                if(result == -1){
-                    cout <<"\nError:  Hard Disk is full\n";
+            vector<int> curr_dir_files = curr_dir->second.second;
+            multimap<int,pair<string,vector<int>>>::iterator file;
+            for(auto i = curr_dir_files.begin();i != curr_dir_files.end();i++){
+                file = metadata.find(*i);
+                if(file->second.first == fname){
+                    break;
                 }
-            } else {
-                cout << "\nError: File name not found\n";
+            }
+            if(file->second.first != fname){
+                cout << "\nError: File does not exist\n" << endl;
                 continue;
+            }
+            fname = filesystem.path + fname;
+            int result = filesystem.del(fname,file->first);
+            if(result == -1){
+                cout <<"\nError:  Hard Disk is full\n";
             }
         } else if (sentinel == "3"){
             //Open File
@@ -106,9 +115,20 @@ int main(int arc,char * argv[]){
                 continue;
             }
 
-            auto file_data = metadata.find(fname);
-            if(file_data != metadata.end()){
-                File file = filesystem.open(fname);
+            vector<int> curr_dir_files = curr_dir->second.second;
+            multimap<int,pair<string,vector<int>>>::iterator file_entry;
+            for(auto i = curr_dir_files.begin();i != curr_dir_files.end();i++){
+                file_entry = metadata.find(*i);
+                if(file_entry->second.first == fname){
+                    break;
+                }
+            }
+            if(file_entry->second.first != fname){
+                cout << "\nError: File does not exist\n" << endl;
+                continue;
+            }
+            if(file_entry != metadata.end()){
+                File file = filesystem.open(fname,file_entry->first);
                 string nest_sentinel;
                 while(nest_sentinel != "-1"){
                     if(!nest_sentinel.empty()){
@@ -130,6 +150,7 @@ int main(int arc,char * argv[]){
                     cout << "3 -> Read File"<<endl;
                     cout << "4 -> Read File from a specific position"<<endl;
                     cout << "5 -> Truncate File"<<endl;
+                    cout << "6 -> Move Within File"<<endl;
                     cout << "-1 -> Quit"<<endl;
                     cin.clear();
                     cout << "Enter an action: ";
@@ -226,6 +247,11 @@ int main(int arc,char * argv[]){
                             continue;
                         }
                         file.truncate_file(filesystem,max_size);
+                    } else if(nest_sentinel == "6"){
+                        cout << "\n\nClosing File..."<<endl;
+                        cout << "\n\n";
+
+                        break;
                     } else if(nest_sentinel == "-1"){
                         cout << "\n\nClosing File..."<<endl;
                         cout << "\n\n";
@@ -240,11 +266,39 @@ int main(int arc,char * argv[]){
         } else if (sentinel == "4"){
             //Memory Map
             cout << "\n";
-            filesystem.memory_map();
+            filesystem.memory_map(filesystem.path,1);
         } else if(sentinel == "5"){
             //Change Directory
+            cout << "Enter the path to the folder (Invalid Characters : |,& or a comma): ";
+            cin.clear();
+            fflush(stdin);
+            getline(cin,fname,'\n');
+            if(!validate_file_name(fname)){
+                cout << "\nError: Invalid Input\n"<<endl;
+                continue;
+            }
+            fname = fname + "/";
+            curr_dir = filesystem.chdir(fname);
+            if(curr_dir == dir_metadata.end()){
+                cout << "\nError: Invalid Path\n"<<endl;
+            }
+            filesystem.path = filesystem.path + curr_dir->first + "/";
         } else if(sentinel == "6"){
             //Make New Directory
+            cout << "Enter name of the folder (Invalid Characters : |,& or a comma): ";
+            cin.clear();
+            fflush(stdin);
+            getline(cin,fname,'\n');
+            if(!validate_file_name(fname)){
+                cout << "\nError: Invalid Input\n"<<endl;
+                continue;
+            }
+            fname = filesystem.path + fname + "/";
+            int result = filesystem.mkdir(fname);
+            if(result == -1){
+                cout << "\nError: Folder name already exists\n"<<endl;
+            }
+            filesystem.path = filesystem.path + curr_dir->first + "/";
         } else if(sentinel == "-1"){
             cout << "\nExiting...\n";
         }

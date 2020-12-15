@@ -89,7 +89,7 @@ string Disk::set_file_metadata(multimap<int,pair<string,vector<int>>> data){
         }
 
 
-        new_metadata += (itr->first +"&"  + itr->second.first + "&" +out.str()+",&\n");
+        new_metadata += (to_string(itr->first) +"&"  + itr->second.first + "&" +out.str()+",&\n");
     }
     if(new_metadata.length() > this->meta_data_limit){
         return "-1";
@@ -134,7 +134,7 @@ Disk::find_dir(multimap<string,pair<vector<string>,vector<int>>>& dir_metadata,v
             break;
         }
     }
-        
+    
     return dir;      
 }
 
@@ -303,7 +303,6 @@ int Disk::create(string fname){
     this->total_files += 1;
 
 
-    file_segments.push_back(total_files);
 
     pair<string,vector<int>> value(fname,file_segments);
     metadata.insert(pair<int,pair<string,vector<int>>>(total_files,value));
@@ -366,6 +365,8 @@ int Disk::del(string fname,int id){
 
         
         string s_dir_metadata = this->set_dir_metadata(dir_metadata);
+
+        total_files -= 1;
 
         fout.seekg(1001);
         fout << s_dir_metadata;
@@ -468,9 +469,12 @@ multimap<string,pair<vector<string>,vector<int>>>::iterator Disk::chdir(string d
     multimap<string,pair<vector<string>,vector<int>>> dir_metadata = this->dir_metadata;
     vector<string> dir_list = parse_path(dir_name);
     multimap<string,pair<vector<string>,vector<int>>>::iterator dir = find_dir(dir_metadata,dir_list);
+    
+    if(dir->first.empty() && dir->first != dir_name) {
+        dir = dir_metadata.end();
+    }
 
     return dir;
-    
 }
 
 
