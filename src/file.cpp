@@ -14,20 +14,21 @@ void File::set_data(string data){
     this->data = data;
 }
 
-File::File(string name){
+File::File(string name,int id){
     this->name = name;
+    this->id = id;
 }
 
 int File::write_to_file(Disk& disk,string text){
     vector<int> free_segments = disk.free_segments;
-    multimap<string,vector<int>> metadata = disk.get_file_metadata();
+    multimap<int,pair<string,vector<int>>> metadata = disk.get_file_metadata();
     vector<string> splits;
-    auto file_data = metadata.find(this->name);
+    auto file_data = metadata.find(this->id);
     vector<int> file_segments;
     if(file_data != metadata.end()){
 
-        if(!file_data->second.empty()){
-            free_segments.insert( free_segments.end(), file_data->second.begin(), file_data->second.end() );
+        if(!file_data->second.second.empty()){
+            free_segments.insert( free_segments.end(), file_data->second.second.begin(), file_data->second.second.end() );
         }
         size_t file_length = text.length();
         if(free_segments.size() * 100 <  file_length){
@@ -50,7 +51,7 @@ int File::write_to_file(Disk& disk,string text){
         }   
 
         disk.free_segments = free_segments;
-        file_data->second = file_segments;
+        file_data->second.second = file_segments;
 
         string new_metadata = disk.set_file_metadata(metadata);
 
@@ -80,11 +81,11 @@ int File::write_to_file(Disk& disk,string text){
 }
 
 int File::write_to_file(Disk& disk,int write_at,string text){
-    multimap<string,vector<int>> metadata = disk.get_file_metadata();
-    auto file_data = metadata.find(this->name);
+    multimap<int,pair<string,vector<int>>> metadata = disk.get_file_metadata();
+    auto file_data = metadata.find(this->id);
     vector<int> file_segments;
     if(file_data != metadata.end()){
-        file_segments = file_data->second;
+        file_segments = file_data->second.second;
     }
 
     vector<int> free_segments = disk.free_segments;
@@ -126,7 +127,7 @@ int File::write_to_file(Disk& disk,int write_at,string text){
     }
 
     disk.free_segments = free_segments;
-    file_data->second = file_segments;
+    file_data->second.second = file_segments;
 
     string new_metadata = disk.set_file_metadata(metadata);
 
@@ -160,11 +161,11 @@ string File::read_from_file(int start,int size){
 }
 
 int File::truncate_file(Disk& disk,int max_size){
-    multimap<string,vector<int>> metadata = disk.get_file_metadata();
-    auto file_data = metadata.find(this->name);
+    multimap<int,pair<string,vector<int>>> metadata = disk.get_file_metadata();
+    auto file_data = metadata.find(this->id);
     vector<int> file_segments;
     if(file_data != metadata.end()){
-        file_segments = file_data->second;
+        file_segments = file_data->second.second;
     }
     vector<int> free_segments = disk.free_segments;
     vector<string> splits;
@@ -189,7 +190,7 @@ int File::truncate_file(Disk& disk,int max_size){
 
     size_t file_length = new_text.length();
     disk.free_segments = free_segments;
-    file_data->second = file_segments;
+    file_data->second.second = file_segments;
 
     string new_metadata = disk.set_file_metadata(metadata);
 
@@ -213,9 +214,15 @@ int File::truncate_file(Disk& disk,int max_size){
     return 0;
 }
 
-// File::move_within_file(int start,int size,int target){
+void File::move_within_file(Disk& disk,int start,int size,int target){
+    string contents = this->data;
+    string src = contents.substr(start,size);
+    string dest = contents.substr(target,size);
+    contents.replace(target,size,src);
+    contents.replace(start,size,dest);
 
-// }
+    this->write_to_file(disk,contents);
+}
 
 
 

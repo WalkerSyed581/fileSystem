@@ -25,21 +25,27 @@ int validate_file_name(string& fname){
     }
 }
 
+//Remeber to pass in forward slash when a finding a directory
 int main(int arc,char * argv[]){
     Disk filesystem = Disk(1000);
     string sentinel = "0";
-    filesystem.memory_map();
+    filesystem.memory_map("root/");
 
     while(sentinel != "-1"){
         string fname;
-        multimap<string,vector<int>> metadata = filesystem.get_file_metadata();
+        multimap<int,pair<string,vector<int>>> metadata = filesystem.get_file_metadata();
+        multimap<string,pair<vector<string>,vector<int>>>::iterator curr_dir = filesystem.chdir("root/");
+
 
 
         cout << "Enter the number written corresponding to the action to move further"<<endl;
+        cout << "Current Path: " << filesystem.path << endl;
         cout << "1\t-> Create File"<<endl;
         cout << "2\t-> Delete File"<<endl;
         cout << "3\t-> Open File"<<endl;
         cout << "4\t-> View Map"<<endl;
+        cout << "5\t-> Change Directory"<< "Current: "<< filesystem.path << endl;
+        cout << "6\t-> Make Directory"<<endl;
         cout << "-1\t-> Quit"<<endl;
         cout << "Enter an action: ";
         cin.clear();
@@ -48,6 +54,7 @@ int main(int arc,char * argv[]){
 
 
         if(sentinel == "1"){
+            //Create File
             cout << "Enter file name (Invalid Characters : |,& or a comma): ";
             cin.clear();
             fflush(stdin);
@@ -68,6 +75,7 @@ int main(int arc,char * argv[]){
             }
             
         } else if (sentinel == "2"){
+            // Delete File
             cout << "Enter file name (Invalid Characters : |,& or a comma): ";
             cin.clear();
             fflush(stdin);
@@ -88,6 +96,7 @@ int main(int arc,char * argv[]){
                 continue;
             }
         } else if (sentinel == "3"){
+            //Open File
             cout << "Enter file name (Invalid Characters : |,& or a comma): ";
             cin.clear();
             fflush(stdin);
@@ -229,8 +238,13 @@ int main(int arc,char * argv[]){
                 continue;
             }
         } else if (sentinel == "4"){
+            //Memory Map
             cout << "\n";
             filesystem.memory_map();
+        } else if(sentinel == "5"){
+            //Change Directory
+        } else if(sentinel == "6"){
+            //Make New Directory
         } else if(sentinel == "-1"){
             cout << "\nExiting...\n";
         }
