@@ -26,37 +26,35 @@ FileSystem Starts After: |
 FilesSeparator: \n*/
 
 
-multimap<string,pair<vector<string>,vector<int>>> Disk::get_dir_metadata(){
+multimap<int,tuple<string,vector<int>,vector<int>>> Disk::get_dir_metadata(){
     return this->dir_metadata;
 }   
 
 
-string Disk::set_dir_metadata(multimap<string,pair<vector<string>,vector<int>>> data){
+string Disk::set_dir_metadata(multimap<int,tuple<string,vector<int>,vector<int>>> data){
     string new_dir_metadata = "";
-    multimap<string,pair<vector<string>,vector<int>>>::iterator itr; 
+    multimap<int,tuple<string,vector<int>,vector<int>>>::iterator itr; 
     for (itr = data.begin(); itr != data.end(); ++itr) { 
         string sfile_segments;
         ostringstream out;
-        vector<string> dirs;
-        vector<int> files;
+        vector<int> dirs = get<1>(itr->second);
+        vector<int> files = get<2>(itr->second);
+        
 
-
-        if (!itr->second.first.empty()){
-            dirs = itr->second.first;
+        if (!dirs.empty()){
             copy(dirs.begin(), dirs.end() - 1,ostream_iterator<int>(out, ","));
             out << dirs.back();
         }
 
         out << ",&";
 
-        if(!itr->second.second.empty()){
-            files = itr->second.second;
+        if(!files.empty()){
             copy(files.begin(), files.end() - 1,ostream_iterator<int>(out, ","));
             out << files.back();
         }
 
 
-        new_dir_metadata += (itr->first +"&" +out.str()+",&\n");
+        new_dir_metadata += (to_string(itr->first) + "&" + get<0>(itr->second) +"&" +out.str()+",&\n");
     }
     if(new_dir_metadata.length() > this->meta_data_limit){
         return "-1";
@@ -120,30 +118,13 @@ vector<string> Disk::parse_path(string& fname){
 }
 
 
- multimap<string,pair<vector<string>,vector<int>>>::iterator
-Disk::find_dir(multimap<string,pair<vector<string>,vector<int>>>& dir_metadata,vector<string>& dir_list){
-    
-    multimap<string,pair<vector<string>,vector<int>>>::iterator dir = dir_metadata.begin();
-    for(auto i = dir_list.begin();i != dir_list.end();++i){
-        auto cur_dir = find(dir,dir_metadata.end(),*i);
-        if(i+1 != dir_list.end() &&
-            find(cur_dir->second.first.begin(),cur_dir->second.first.end(),*(i+1)) != cur_dir->second.first.end()){
-            dir = find(dir,dir_metadata.end(),*(i+1));
-        } else {
-            dir = cur_dir;
-            break;
-        }
-    }
-    
-    return dir;      
-}
 
 
 //Done not tested
 Disk::Disk(int meta_data_limit){
     this->meta_data_limit = meta_data_limit;
     multimap<int,pair<string,vector<int>>> data;
-    multimap<string,pair<vector<string>,vector<int>>> dir_metadata;
+    multimap<int,tuple<string,vector<int>,vector<int>>> dir_metadata;
     vector<int> occupied_segments,free_segments,total_segments;
     fstream fin("../file_system.txt",ios::in);
     ofstream fout;
@@ -158,105 +139,121 @@ Disk::Disk(int meta_data_limit){
     if (fin.fail()) {
 
         vector<int> root_files;
-        vector<string> root_dirs;
+        vector<int> root_dirs;
         fout.open("../file_system.txt",ios::app); 
-        this->set_file_metadata(data);
-        dir_metadata.insert(pair<string,pair<vector<string>,vector<int>>>("root",pair<vector<string>,vector<int>>(root_dirs,root_files)));
-        this->set_dir_metadata(dir_metadata);
-        this->total_files = 0;
+        string s_file_metadata =this->set_file_metadata(data);
+        fout << s_file_metadata;
+        dir_metadata.insert(pair<int,tuple<string,vector<int>,vector<int>>>(0,tuple<string,vector<int>,vector<int>>("root",root_dirs,root_files)));
+
+        string s_dir_metadata = this->set_dir_metadata(dir_metadata);
+        fout.seekp(1001);
+        fout << s_dir_metadata;
         this->free_segments = total_segments;
         this->path = "root/";
-
+        this->curr_dir = 0;
     } else  {
 
         //Attempting to read the file metadata
         getline(fin,metadata,'|');
 
-        stringstream buffer(metadata);
 
-        while(getline(buffer, field, '\n') && metadata.length() > 0){
-            vector<int> segment_array = {};
+        if(metadata.length() != 0){
 
-            string id ="",name="",segments="";
+            stringstream buffer(metadata);
 
-            file_count += 1;
+            while(getline(buffer, field, '\n')){
+                vector<int> segment_array = {};
 
-            stringstream field_buffer(field);
+                string id ="",name="",segments="";
 
-            getline(field_buffer,id,'&');
+                file_count += 1;
 
-            getline(field_buffer,name,'&');
-
-            getline(field_buffer,segments,'&');
+                stringstream field_buffer(field);
 
 
-            size_t pos = 0;
-            string token;
-            string delimiter = ",";
-            while ((pos = segments.find(delimiter)) != string::npos) {
-                token = segments.substr(0, pos);
-                if(token.empty()){
+                getline(field_buffer,id,'&');
+
+                if(id.empty()){
                     break;
                 }
-                segment_array.push_back(stoi(token));
-                occupied_segments.push_back(stoi(token));
-                segments.erase(0, pos + delimiter.length());
 
+                getline(field_buffer,name,'&');
+
+                getline(field_buffer,segments,'&');
+
+
+                size_t pos = 0;
+                string token;
+                string delimiter = ",";
+                while ((pos = segments.find(delimiter)) != string::npos) {
+                    token = segments.substr(0, pos);
+                    if(token.empty()){
+                        break;
+                    }
+                    segment_array.push_back(stoi(token));
+                    occupied_segments.push_back(stoi(token));
+                    segments.erase(0, pos + delimiter.length());
+
+                }
+                
+                pair<string,vector<int>> value(name,segment_array);
+                data.insert(pair<int,pair<string,vector<int>>>(stoi(id),value));
             }
-            
-            pair<string,vector<int>> value(name,segment_array);
-            data.insert(pair<int,pair<string,vector<int>>>(stoi(id),value));
         }
-
-        //Attempting to read the folder metadata        
+        //Attempting to read the folder metadata 
+        fin.seekg(1001);
         getline(fin,s_dir_metadata,'|');
 
-        stringstream dir_buffer(s_dir_metadata);
+        if(s_dir_metadata.length() != 0){
+            stringstream dir_buffer(s_dir_metadata);
+             while(getline(dir_buffer, field, '\n') && s_dir_metadata.length() > 0){
+                vector<int> file_array, dir_array;
 
-        while(getline(dir_buffer, field, '\n') && metadata.length() > 0){
-            vector<int> file_array = {};
-            vector<string> dir_array = {};
-
-            string entry ="",dirs="",files="";
-
-
-            stringstream field_buffer(field);
-
-            getline(field_buffer,entry,'&');
-
-            getline(field_buffer,dirs,'&');
-
-            getline(field_buffer,files,'&');
+                string id,name ="",dirs="",files="";
 
 
-            size_t pos = 0;
-            string token;
-            string delimiter = ",";
-            while ((pos = dirs.find(delimiter)) != string::npos) {
-                token = dirs.substr(0, pos);
-                if(token.empty()){
-                    break;
+                stringstream field_buffer(field);
+
+
+
+                getline(field_buffer,id,'&');
+
+
+
+                getline(field_buffer,name,'&');
+
+                getline(field_buffer,dirs,'&');
+
+                getline(field_buffer,files,'&');
+
+
+                size_t pos = 0;
+                string token;
+                string delimiter = ",";
+                while ((pos = dirs.find(delimiter)) != string::npos) {
+                    token = dirs.substr(0, pos);
+                    if(token.empty()){
+                        break;
+                    }
+                    dir_array.push_back(stoi(token));
+                    dirs.erase(0, pos + delimiter.length());
                 }
-                dir_array.push_back(token);
-                dirs.erase(0, pos + delimiter.length());
+                pos = 0;
+                token="";
+                while ((pos = files.find(delimiter)) != string::npos) {
+                    token = files.substr(0, pos);
+                    if(token.empty()){
+                        break;
+                    }
+                    file_array.push_back(stoi(token));
+                    dirs.erase(0, pos + delimiter.length());
+                }
+                
+                dir_metadata.insert(pair<int,tuple<string,vector<int>,vector<int>>>(stoi(id),tuple<string,vector<int>,vector<int>>(name,dir_array,file_array)));
+
             }
 
-            while ((pos = files.find(delimiter)) != string::npos) {
-                token = files.substr(0, pos);
-                if(token.empty()){
-                    break;
-                }
-                file_array.push_back(stoi(token));
-                dirs.erase(0, pos + delimiter.length());
-            }
-            
-            pair<vector<string>,vector<int>> value(dir_array,file_array);
-            dir_metadata.insert(pair<string,pair<vector<string>,vector<int>>>(entry,value));
         }
-
-
-
-
 
         //Tinkering out the free segments from the occupied one
         sort(total_segments.begin(), total_segments.end());
@@ -271,7 +268,8 @@ Disk::Disk(int meta_data_limit){
         this->free_segments = free_segments;
         this->metadata = data;
         this->dir_metadata = dir_metadata;
-        this->total_files = 0;
+        this->curr_dir = 0;
+        this->path = "root/";
 
 
         // Commented out writing back to the file
@@ -287,11 +285,7 @@ Disk::Disk(int meta_data_limit){
 
 int Disk::create(string fname){
     multimap<int,pair<string,vector<int>>> metadata = this->get_file_metadata();
-    multimap<string,pair<vector<string>,vector<int>>> dir_metadata =this->get_dir_metadata();
-
-    
-    vector<string> dir_list = this->parse_path(fname);
-    
+    multimap<int,tuple<string,vector<int>,vector<int>>> dir_metadata =this->get_dir_metadata();
 
  
     fstream fout;
@@ -300,20 +294,20 @@ int Disk::create(string fname){
     string new_metadata = "";
     vector<int> file_segments;
 
-    this->total_files += 1;
+    ++Disk::total_files;
 
 
 
     pair<string,vector<int>> value(fname,file_segments);
-    metadata.insert(pair<int,pair<string,vector<int>>>(total_files,value));
+    metadata.insert(pair<int,pair<string,vector<int>>>(Disk::total_files,value));
 
     new_metadata = this->set_file_metadata(metadata);
 
     if(new_metadata != "-1"){
         fout << new_metadata;
-        map<string,pair<vector<string>,vector<int>>>::iterator dir = find_dir(dir_metadata,dir_list);
+        map<int,tuple<string,vector<int>,vector<int>>>::iterator dir = dir_metadata.find(this->curr_dir);
 
-        dir->second.second.push_back(total_files);
+        get<2>(dir->second).push_back(Disk::total_files);
 
         string s_dir_metadata = this->set_dir_metadata(dir_metadata);
 
@@ -323,7 +317,7 @@ int Disk::create(string fname){
 
         return 0;
     } else {
-        --total_files;
+        --Disk::total_files;
 
         return -1;
     }
@@ -331,7 +325,7 @@ int Disk::create(string fname){
 
 int Disk::del(string fname,int id){
     multimap<int,pair<string,vector<int>>> metadata = this->get_file_metadata();
-    multimap<string,pair<vector<string>,vector<int>>> dir_metadata =this->get_dir_metadata();
+    multimap<int,tuple<string,vector<int>,vector<int>>> dir_metadata =this->get_dir_metadata();
 
 
     vector<string> dir_list = this->parse_path(fname);
@@ -360,13 +354,13 @@ int Disk::del(string fname,int id){
 
         fout << new_metadata;
 
-        map<string,pair<vector<string>,vector<int>>>::iterator dir = find_dir(dir_metadata,dir_list);
+        map<int,tuple<string,vector<int>,vector<int>>>::iterator dir = dir_metadata.find(this->curr_dir);
 
 
         
         string s_dir_metadata = this->set_dir_metadata(dir_metadata);
 
-        total_files -= 1;
+        --Disk::total_files;
 
         fout.seekg(1001);
         fout << s_dir_metadata;
@@ -410,24 +404,22 @@ void Disk::close(string fname,int id){
 
 
 
-void Disk::memory_map(string path,int level){
-    if(!metadata.empty()){
+void Disk::memory_map(int id,int level){
+    if(!this->dir_metadata.empty()){
         multimap<int,pair<string,vector<int>>>::iterator itr;
-        string path_ = path;
-        vector<string> dir_list = this->parse_path(path); 
-        auto curr_dir = find_dir(this->dir_metadata, dir_list);
-        
-        cout<< "|\n|----- ";
+        auto curr_dir = this->dir_metadata.find(id);
+        cout<< "|\n|-----";
         for(int i = 1;i < level;i++){
-            cout << "\t";
+            cout << "------";
         }
-        cout << curr_dir->first << "\n|";
+        cout << get<0>(curr_dir->second) << "\n|";
 
         
-        for(auto i = dir_list.begin();i != dir_list.end() && !curr_dir->second.second.empty(); i++){
-            this->memory_map(path_ + "/" + *i,level + 1);
+        for(auto i = get<1>(curr_dir->second).begin();i != get<1>(curr_dir->second).end() && !get<1>(curr_dir->second).empty(); i++){
+            this->memory_map(*i,level + 1);
         }
-        for (itr = this->metadata.begin(); itr != this->metadata.end(); ++itr) { 
+        for(auto i = get<2>(curr_dir->second).begin();i != get<2>(curr_dir->second).end() && !get<2>(curr_dir->second).empty(); i++){
+            auto itr = this->metadata.find(*i);
             ostringstream out;
 
             if (!itr->second.second.empty()){
@@ -435,9 +427,9 @@ void Disk::memory_map(string path,int level){
                 out << itr->second.second.back();
             }
 
-            cout << "|\n|---- ";
+            cout << "|\n|-----";
             for(int i = 0;i < level;i++){
-                cout << "\t";
+                cout << "------";
             }
             cout << itr->second.first + ", Segments -> " + out.str() + "\n|";
         } 
@@ -447,34 +439,49 @@ void Disk::memory_map(string path,int level){
 }
 
 int Disk::mkdir(string dir_name){
-    multimap<string,pair<vector<string>,vector<int>>> dir_metadata = this->dir_metadata;
-    vector<string> dir_list = parse_path(dir_name);
-    auto dir = find_dir(dir_metadata,dir_list);
+    multimap<int,tuple<string,vector<int>,vector<int>>> dir_metadata = this->dir_metadata;
+    auto dir = dir_metadata.find(this->curr_dir);
 
     //Checking for a duplicate folder name
-    for(auto i = dir->second.first.begin(); i != dir->second.first.end(); i++){
-        if(*i == dir_name){
+    for(auto i = get<1>(dir->second).begin(); i != get<1>(dir->second).end(); i++){
+        string name = get<0>(dir_metadata.find(*i)->second);
+        if(name == dir_name){
             return -1;
         }   
     }
+    vector<int> dir_list,file_list;
+    ++Disk::total_folders;
+    get<1>(dir->second).push_back(Disk::total_folders);
+    dir_metadata.insert(pair<int,tuple<string,vector<int>,vector<int>>>(Disk::total_folders,tuple<string,vector<int>,vector<int>>(dir_name,dir_list,file_list)));
+    string s_dir_metadata = this->set_dir_metadata(dir_metadata);
+    fstream fout;
+    fout.open("../file_system.txt");
 
-    dir->second.first.push_back(dir_name);
-    this->set_dir_metadata(dir_metadata);
+    fout.seekg(1001);
+    fout << s_dir_metadata;
     return 0;
 }
 
 //Opening a directory 
-multimap<string,pair<vector<string>,vector<int>>>::iterator Disk::chdir(string dir_name){
+multimap<int,tuple<string,vector<int>,vector<int>>>::iterator Disk::chdir(string dir_name){
     //Finding the directory
-    multimap<string,pair<vector<string>,vector<int>>> dir_metadata = this->dir_metadata;
-    vector<string> dir_list = parse_path(dir_name);
-    multimap<string,pair<vector<string>,vector<int>>>::iterator dir = find_dir(dir_metadata,dir_list);
-    
-    if(dir->first.empty() && dir->first != dir_name) {
-        dir = dir_metadata.end();
-    }
+    multimap<int,tuple<string,vector<int>,vector<int>>> dir_metadata = this->dir_metadata;
 
-    return dir;
+    multimap<int,tuple<string,vector<int>,vector<int>>>::iterator dir = dir_metadata.find(this->curr_dir);
+    
+    if(dir_name == "root"){
+        return dir;
+    }
+    for(auto i = get<1>(dir->second).begin(); i != get<1>(dir->second).end(); i++){
+        auto new_dir = dir_metadata.find(*i);
+        string name = get<0>(new_dir->second);
+        if(name == dir_name){
+            this->curr_dir = new_dir->first;
+            return new_dir;
+        }
+    }
+    multimap<int,tuple<string,vector<int>,vector<int>>>::iterator end = dir_metadata.end();
+    return end;
 }
 
 

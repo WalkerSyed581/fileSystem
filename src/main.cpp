@@ -25,27 +25,29 @@ int validate_file_name(string& fname){
     }
 }
 
+
+int Disk::total_files = 0;
+int Disk::total_folders = 0;
+
 //Remeber to pass in forward slash when a finding a directory
 int main(int arc,char * argv[]){
     Disk filesystem = Disk(1000);
     string sentinel = "0";
-    filesystem.memory_map("root/");
+    filesystem.memory_map(0,1);
 
     while(sentinel != "-1"){
         string fname;
         multimap<int,pair<string,vector<int>>> metadata = filesystem.get_file_metadata();
-        multimap<string,pair<vector<string>,vector<int>>> dir_metadata = filesystem.get_dir_metadata();
-        multimap<string,pair<vector<string>,vector<int>>>::iterator curr_dir = filesystem.chdir("root/");
+        multimap<int,tuple<string,vector<int>,vector<int>>> dir_metadata = filesystem.get_dir_metadata();
+        multimap<int,tuple<string,vector<int>,vector<int>>>::iterator curr_dir = filesystem.chdir("root");
 
-
-
-        cout << "Enter the number written corresponding to the action to move further"<<endl;
+        cout << "\nEnter the number written corresponding to the action to move further"<<endl;
         cout << "Current Path: " << filesystem.path << endl;
         cout << "1\t-> Create File"<<endl;
         cout << "2\t-> Delete File"<<endl;
         cout << "3\t-> Open File"<<endl;
         cout << "4\t-> View Map"<<endl;
-        cout << "5\t-> Change Directory"<< "Current: "<< filesystem.path << endl;
+        cout << "5\t-> Change Directory"<< " Current: "<< filesystem.path << endl;
         cout << "6\t-> Make Directory"<<endl;
         cout << "-1\t-> Quit"<<endl;
         cout << "Enter an action: ";
@@ -64,7 +66,7 @@ int main(int arc,char * argv[]){
                 cout << "\nError: Invalid File Name"<<endl;
                 continue;
             }
-            vector<int> curr_dir_files = curr_dir->second.second;
+            vector<int> curr_dir_files = get<2>(curr_dir->second);
             multimap<int,pair<string,vector<int>>>::iterator file;
             for(auto i = curr_dir_files.begin();i != curr_dir_files.end();i++){
                 file = metadata.find(*i);
@@ -72,7 +74,6 @@ int main(int arc,char * argv[]){
                     cout << "\nError: File name already exists\n";
                 } 
             }
-            fname = filesystem.path + fname;
             int result = filesystem.create(fname);
             if(result == -1){
                 cout <<"\nError: Hard Disk is full\n";
@@ -87,7 +88,7 @@ int main(int arc,char * argv[]){
                 cout << "\nError: Invalid File Name"<<endl;
                 continue;
             }
-            vector<int> curr_dir_files = curr_dir->second.second;
+            vector<int> curr_dir_files = get<2>(curr_dir->second);
             multimap<int,pair<string,vector<int>>>::iterator file;
             for(auto i = curr_dir_files.begin();i != curr_dir_files.end();i++){
                 file = metadata.find(*i);
@@ -99,7 +100,6 @@ int main(int arc,char * argv[]){
                 cout << "\nError: File does not exist\n" << endl;
                 continue;
             }
-            fname = filesystem.path + fname;
             int result = filesystem.del(fname,file->first);
             if(result == -1){
                 cout <<"\nError:  Hard Disk is full\n";
@@ -115,7 +115,7 @@ int main(int arc,char * argv[]){
                 continue;
             }
 
-            vector<int> curr_dir_files = curr_dir->second.second;
+            vector<int> curr_dir_files = get<2>(curr_dir->second);
             multimap<int,pair<string,vector<int>>>::iterator file_entry;
             for(auto i = curr_dir_files.begin();i != curr_dir_files.end();i++){
                 file_entry = metadata.find(*i);
@@ -266,7 +266,7 @@ int main(int arc,char * argv[]){
         } else if (sentinel == "4"){
             //Memory Map
             cout << "\n";
-            filesystem.memory_map(filesystem.path,1);
+            filesystem.memory_map(curr_dir->first,1);
         } else if(sentinel == "5"){
             //Change Directory
             cout << "Enter the path to the folder (Invalid Characters : |,& or a comma): ";
@@ -277,12 +277,11 @@ int main(int arc,char * argv[]){
                 cout << "\nError: Invalid Input\n"<<endl;
                 continue;
             }
-            fname = fname + "/";
             curr_dir = filesystem.chdir(fname);
             if(curr_dir == dir_metadata.end()){
                 cout << "\nError: Invalid Path\n"<<endl;
             }
-            filesystem.path = filesystem.path + curr_dir->first + "/";
+            filesystem.path = filesystem.path + get<0>(curr_dir->second) + "/";
         } else if(sentinel == "6"){
             //Make New Directory
             cout << "Enter name of the folder (Invalid Characters : |,& or a comma): ";
@@ -293,12 +292,10 @@ int main(int arc,char * argv[]){
                 cout << "\nError: Invalid Input\n"<<endl;
                 continue;
             }
-            fname = filesystem.path + fname + "/";
             int result = filesystem.mkdir(fname);
             if(result == -1){
                 cout << "\nError: Folder name already exists\n"<<endl;
             }
-            filesystem.path = filesystem.path + curr_dir->first + "/";
         } else if(sentinel == "-1"){
             cout << "\nExiting...\n";
         }
