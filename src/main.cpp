@@ -6,12 +6,23 @@
 #include <iostream>
 #include <vector>
 #include <string>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 #include "disk.h"
 #include "../include/filesystem/file.h"
 
 using namespace std;
 
-
+int file_is_modified(const char* path, time_t oldMTime) {
+    struct stat file_stat;
+    int err = stat(path, &file_stat);
+    if (err != 0) {
+        perror(" [file_is_modified] stat");
+        exit(errno);
+    }
+    return file_stat.st_mtime > oldMTime;
+}
 
 int validate_file_name(string& fname){
     if(fname.find('|') != string::npos || 
@@ -34,12 +45,12 @@ int main(int arc,char * argv[]){
     Disk filesystem = Disk(1000);
     string sentinel = "0";
     filesystem.memory_map(0,1);
+    multimap<int,tuple<string,vector<int>,vector<int>>>::iterator curr_dir = filesystem.chdir("root");
+    multimap<int,pair<string,vector<int>>> metadata;
+    multimap<int,tuple<string,vector<int>,vector<int>>> dir_metadata;
 
     while(sentinel != "-1"){
         string fname;
-        multimap<int,pair<string,vector<int>>> metadata = filesystem.get_file_metadata();
-        multimap<int,tuple<string,vector<int>,vector<int>>> dir_metadata = filesystem.get_dir_metadata();
-        multimap<int,tuple<string,vector<int>,vector<int>>>::iterator curr_dir = filesystem.chdir("root");
 
         cout << "\nEnter the number written corresponding to the action to move further"<<endl;
         cout << "Current Path: " << filesystem.path << endl;
@@ -55,6 +66,9 @@ int main(int arc,char * argv[]){
         getline(cin,sentinel,'\n');
         cin.clear();
 
+        filesystem.update_metadata();
+        metadata = filesystem.get_file_metadata();
+        dir_metadata = filesystem.get_dir_metadata();
 
         if(sentinel == "1"){
             //Create File
@@ -88,7 +102,7 @@ int main(int arc,char * argv[]){
                 cout << "\nError: Invalid File Name"<<endl;
                 continue;
             }
-            vector<int> curr_dir_files = get<2>(curr_dir->second);
+            vector<int> curr_dir_files = get<2>(dir_metadata.find(filesystem.curr_dir)->second);
             multimap<int,pair<string,vector<int>>>::iterator file;
             for(auto i = curr_dir_files.begin();i != curr_dir_files.end();i++){
                 file = metadata.find(*i);
@@ -115,7 +129,7 @@ int main(int arc,char * argv[]){
                 continue;
             }
 
-            vector<int> curr_dir_files = get<2>(curr_dir->second);
+            vector<int> curr_dir_files = get<2>(dir_metadata.find(filesystem.curr_dir)->second);
             multimap<int,pair<string,vector<int>>>::iterator file_entry;
             for(auto i = curr_dir_files.begin();i != curr_dir_files.end();i++){
                 file_entry = metadata.find(*i);
@@ -157,7 +171,13 @@ int main(int arc,char * argv[]){
                     fflush(stdin);
                     getline(cin,nest_sentinel,'\n');
                     cin.clear();
+
+                    filesystem.update_metadata();
+                    metadata = filesystem.get_file_metadata();
+                    dir_metadata = filesystem.get_dir_metadata();
+                    file.update_file(metadata);
                     if(nest_sentinel == "1"){
+                        //Write to file
                         string text;
                         cout << "Enter the text to write into the file: ";
                         cin.clear();
@@ -171,6 +191,7 @@ int main(int arc,char * argv[]){
                         }
                         metadata = filesystem.get_file_metadata();
                     } else if(nest_sentinel == "2"){
+                        //Write to file at a position
                         string text,buffer;
                         int pos;
                         cout << "Enter the position to write the text into the file: ";
@@ -248,10 +269,45 @@ int main(int arc,char * argv[]){
                         }
                         file.truncate_file(filesystem,max_size);
                     } else if(nest_sentinel == "6"){
-                        cout << "\n\nClosing File..."<<endl;
-                        cout << "\n\n";
+                        // Move within file
+                        int start,size,target;
+                        string buffer;
+                        string contents = file.get_data();
+                        cout << "Enter the position to start reading data from the file: ";
+                        cin.clear();
+                        fflush(stdin);
+                        getline(cin,buffer,'\n');
+                        start = stoi(buffer);
+                        cin.clear();
+                        if(start > contents.length()){
+                            cout << "\nError: Invalid value\n";
+                            continue;
+                        }
+                        cout << "Enter the size of data  to be read from the file: ";
+                        cin.clear();
+                        fflush(stdin);
+                        getline(cin,buffer,'\n');
+                        size = stoi(buffer);
+                        cin.clear();
+                        if(size + start > contents.length()){
+                            cout << "\nError: invalid values\n";
+                            continue;
+                        }
 
-                        break;
+                        cout << "Enter the position to put the data into within the file: ";
+                        cin.clear();
+                        fflush(stdin);
+                        getline(cin,buffer,'\n');
+                        target = stoi(buffer);
+                        cin.clear();
+                        if(target + size > contents.length()){
+                            cout << "\nError: Invalid value\n";
+                            continue;
+                        }
+                        int result = file.move_within_file(filesystem,start,size,target);
+                        if(result == -1 || result == -2){
+                            cout << "\nHard Disk Full"<<endl;
+                        } 
                     } else if(nest_sentinel == "-1"){
                         cout << "\n\nClosing File..."<<endl;
                         cout << "\n\n";
@@ -269,7 +325,7 @@ int main(int arc,char * argv[]){
             filesystem.memory_map(curr_dir->first,1);
         } else if(sentinel == "5"){
             //Change Directory
-            cout << "Enter the path to the folder (Invalid Characters : |,& or a comma): ";
+            cout << "Enter the name of the folder (Invalid Characters : |,& or a comma): ";
             cin.clear();
             fflush(stdin);
             getline(cin,fname,'\n');
@@ -277,11 +333,14 @@ int main(int arc,char * argv[]){
                 cout << "\nError: Invalid Input\n"<<endl;
                 continue;
             }
-            curr_dir = filesystem.chdir(fname);
-            if(curr_dir == dir_metadata.end()){
+            multimap<int,tuple<string,vector<int>,vector<int>>>::iterator new_dir = filesystem.chdir(fname);
+            if(new_dir == dir_metadata.end()){
                 cout << "\nError: Invalid Path\n"<<endl;
+                continue;
+            } else {
+                curr_dir = new_dir;
+                filesystem.path = filesystem.path + get<0>(curr_dir->second) + "/";
             }
-            filesystem.path = filesystem.path + get<0>(curr_dir->second) + "/";
         } else if(sentinel == "6"){
             //Make New Directory
             cout << "Enter name of the folder (Invalid Characters : |,& or a comma): ";

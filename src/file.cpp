@@ -19,6 +19,30 @@ File::File(string name,int id){
     this->id = id;
 }
 
+void File::update_file(multimap<int,pair<string,vector<int>>>& metadata){
+    auto file_data = metadata.find(this->id);
+    vector<int> file_segments;
+    if(file_data != metadata.end()){
+        file_segments = file_data->second.second;
+    }
+
+    fstream fin("../file_system.txt",ios::in);
+
+    string contents = "";
+
+    for (auto i = file_segments.begin(); i != file_segments.end(); ++i){
+        fin.seekg(2002 + ((*i) * 101));
+        string buffer = "";
+        getline(fin,buffer,'\n');
+        contents += buffer;
+    }
+
+    fin.close();
+    
+    this->set_data(contents);
+
+}
+
 int File::write_to_file(Disk& disk,string text){
     vector<int> free_segments = disk.free_segments;
     multimap<int,pair<string,vector<int>>> metadata = disk.get_file_metadata();
@@ -67,14 +91,14 @@ int File::write_to_file(Disk& disk,string text){
 
 
         for (auto i = file_segments.begin(); i != file_segments.end(); ++i){
-            fout.seekg(1001 + ((*i) * 101));
+            fout.seekg(2002 + ((*i) * 101));
             string curr_string  = splits[0];
             curr_string.push_back('\n');
-            curr_string.resize(100);
+            curr_string.resize(101);
             fout << curr_string;
             splits.erase(splits.begin());
         }
-
+        fout.close();
         this->data = text;
     }
     return 0;
@@ -141,13 +165,14 @@ int File::write_to_file(Disk& disk,int write_at,string text){
     }
 
     for (auto i = file_segments.begin(); i != file_segments.end(); ++i){
-        fout.seekg(1001 + ((*i) * 101));
+        fout.seekg(2002 + ((*i) * 101));
         string curr_string  = splits[0];
         curr_string.push_back('\n');
         curr_string.resize(101);
         fout << curr_string;
         splits.erase(splits.begin());
     }
+    fout.close();
     return 0;
 }
 
@@ -205,23 +230,25 @@ int File::truncate_file(Disk& disk,int max_size){
 
     string last_segment_data = new_text.substr(segment_number * 100,max_size % 100);
 
-    fout.seekg(1001 + ((segment_number) * 101));
+    fout.seekg(2002 + ((segment_number) * 101));
     last_segment_data.push_back('\n');
     last_segment_data.resize(101);
     cout << last_segment_data;
     fout << last_segment_data;
     this->set_data(new_text);
+    fout.close();
     return 0;
 }
 
-void File::move_within_file(Disk& disk,int start,int size,int target){
+int File::move_within_file(Disk& disk,int start,int size,int target){
     string contents = this->data;
     string src = contents.substr(start,size);
     string dest = contents.substr(target,size);
     contents.replace(target,size,src);
     contents.replace(start,size,dest);
 
-    this->write_to_file(disk,contents);
+    int result = this->write_to_file(disk,contents);
+    return result;
 }
 
 

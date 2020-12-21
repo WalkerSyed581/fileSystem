@@ -26,6 +26,9 @@ class Disk {
         static int total_folders;
         static int total_files;
 
+        //Utility Functions
+        void update_metadata();
+        static vector<string> parse_path(string& fname);
 
 
         //Getters & Setters
@@ -47,7 +50,7 @@ class Disk {
         void memory_map(int dir_id,int level=1);
         void close(string fname,int id);
 
-        static vector<string> parse_path(string& fname);
+
 
 
 };
