@@ -14,6 +14,10 @@ void File::set_data(string data){
     this->data = data;
 }
 
+File::File(){
+    this->name = "";
+    this->id = -1;
+}
 File::File(string name,int id){
     this->name = name;
     this->id = id;
@@ -90,7 +94,7 @@ int File::write_to_file(Disk& disk,string text){
 
 
 
-        for (auto i = file_segments.begin(); i != file_segments.end(); ++i){
+        for(auto i = file_segments.begin(); i != file_segments.end(); ++i){
             fout.seekg(2002 + ((*i) * 101));
             string curr_string  = splits[0];
             curr_string.push_back('\n');
@@ -233,7 +237,6 @@ int File::truncate_file(Disk& disk,int max_size){
     fout.seekg(2002 + ((segment_number) * 101));
     last_segment_data.push_back('\n');
     last_segment_data.resize(101);
-    cout << last_segment_data;
     fout << last_segment_data;
     this->set_data(new_text);
     fout.close();

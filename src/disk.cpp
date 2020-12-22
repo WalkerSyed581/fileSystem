@@ -131,6 +131,11 @@ void Disk::update_metadata(){
 
     getline(fin,metadata,'|');
 
+    fin.seekg(1001);
+
+    getline(fin,s_dir_metadata,'|');
+
+
     if(metadata.length() != 0){
 
         stringstream buffer(metadata);
@@ -166,15 +171,12 @@ void Disk::update_metadata(){
             
             
             data.insert(pair<int,pair<string,vector<int>>>(stoi(id),pair<string,vector<int>>(name,segment_array)));
-            cout << id <<endl;
             if(this->metadata.find(stoi(id)) == this->metadata.end()){
                 ++Disk::total_files;
             }
         }
     }
-    //Attempting to read the folder metadata 
-    fin.seekg(1001);
-    getline(fin,s_dir_metadata,'|');
+   
 
 
 
@@ -225,7 +227,6 @@ void Disk::update_metadata(){
             }
             
             dir_metadata.insert(pair<int,tuple<string,vector<int>,vector<int>>>(stoi(id),tuple<string,vector<int>,vector<int>>(name,dir_array,file_array)));
-            cout << id <<endl;
             if(this->dir_metadata.find(stoi(id)) == this->dir_metadata.end()){
                 ++Disk::total_folders;
             }
@@ -279,7 +280,6 @@ Disk::Disk(int meta_data_limit){
         fout << s_dir_metadata;
         this->free_segments = total_segments;
         this->path = "root/";
-        this->curr_dir = 0;
         fin.close();
         fout.close();
     } else  {
@@ -287,6 +287,10 @@ Disk::Disk(int meta_data_limit){
         //Attempting to read the file metadata
         getline(fin,metadata,'|');
 
+        fin.seekg(1001);
+        getline(fin,s_dir_metadata,'|');
+
+        fin.close();
 
         if(metadata.length() != 0){
 
@@ -328,8 +332,7 @@ Disk::Disk(int meta_data_limit){
             }
         }
         //Attempting to read the folder metadata 
-        fin.seekg(1001);
-        getline(fin,s_dir_metadata,'|');
+        
 
 
         if(s_dir_metadata.length() != 0){
@@ -396,11 +399,9 @@ Disk::Disk(int meta_data_limit){
         this->free_segments = free_segments;
         this->metadata = data;
         this->dir_metadata = dir_metadata;
-        this->curr_dir = 0;
         this->path = "root/";
 
         fout.close();
-        fin.close();
 
 
         // Commented out writing back to the file
@@ -414,7 +415,7 @@ Disk::Disk(int meta_data_limit){
     }
 }
 
-int Disk::create(string fname){
+int Disk::create(string fname,int curr_dir){
     multimap<int,pair<string,vector<int>>> metadata = this->get_file_metadata();
     multimap<int,tuple<string,vector<int>,vector<int>>> dir_metadata =this->get_dir_metadata();
 
@@ -435,7 +436,7 @@ int Disk::create(string fname){
 
     if(new_metadata != "-1"){
         fout << new_metadata;
-        map<int,tuple<string,vector<int>,vector<int>>>::iterator dir = dir_metadata.find(this->curr_dir);
+        map<int,tuple<string,vector<int>,vector<int>>>::iterator dir = dir_metadata.find(curr_dir);
 
         get<2>(dir->second).push_back(Disk::total_files);
 
@@ -453,7 +454,7 @@ int Disk::create(string fname){
     }
 }
 
-int Disk::del(string fname,int id){
+int Disk::del(string fname,int id,int dir_id){
     multimap<int,pair<string,vector<int>>> metadata = this->get_file_metadata();
     multimap<int,tuple<string,vector<int>,vector<int>>> dir_metadata =this->get_dir_metadata();
 
@@ -484,7 +485,7 @@ int Disk::del(string fname,int id){
 
         fout << new_metadata;
 
-        map<int,tuple<string,vector<int>,vector<int>>>::iterator dir = dir_metadata.find(this->curr_dir);
+        map<int,tuple<string,vector<int>,vector<int>>>::iterator dir = dir_metadata.find(dir_id);
 
 
         
@@ -572,9 +573,9 @@ void Disk::memory_map(int id,int level){
     }
 }
 
-int Disk::mkdir(string dir_name){
+int Disk::mkdir(string dir_name,int curr_dir){
     multimap<int,tuple<string,vector<int>,vector<int>>> dir_metadata = this->dir_metadata;
-    auto dir = dir_metadata.find(this->curr_dir);
+    auto dir = dir_metadata.find(curr_dir);
 
     //Checking for a duplicate folder name
     for(auto i = get<1>(dir->second).begin(); i != get<1>(dir->second).end(); i++){
@@ -599,21 +600,20 @@ int Disk::mkdir(string dir_name){
 }
 
 //Opening a directory 
-multimap<int,tuple<string,vector<int>,vector<int>>>::iterator Disk::chdir(string dir_name){
+multimap<int,tuple<string,vector<int>,vector<int>>>::iterator Disk::chdir(string dir_name,int curr_dir){
     //Finding the directory
     multimap<int,tuple<string,vector<int>,vector<int>>> dir_metadata = this->dir_metadata;
-
-    multimap<int,tuple<string,vector<int>,vector<int>>>::iterator dir = dir_metadata.find(this->curr_dir);
-    
     if(dir_name == "root"){
+        multimap<int,tuple<string,vector<int>,vector<int>>>::iterator dir =  dir_metadata.find(0);
         return dir;
-        this->curr_dir = 0;
     }
+    multimap<int,tuple<string,vector<int>,vector<int>>>::iterator dir = dir_metadata.find(curr_dir);
+    
+    
     for(auto i = get<1>(dir->second).begin(); i != get<1>(dir->second).end(); i++){
         auto new_dir = dir_metadata.find(*i);
         string name = get<0>(new_dir->second);
         if(name == dir_name){
-            this->curr_dir = new_dir->first;
             return new_dir;
         }
     }

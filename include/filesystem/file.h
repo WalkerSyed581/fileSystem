@@ -11,7 +11,8 @@ class File {
     private:
         string data;
     
-    public:
+    public: 
+        File();
         File(string name,int id);
         string name;
         int id;
