@@ -600,25 +600,22 @@ int Disk::mkdir(string dir_name,int curr_dir){
 }
 
 //Opening a directory 
-multimap<int,tuple<string,vector<int>,vector<int>>>::iterator Disk::chdir(string dir_name,int curr_dir){
+int Disk::chdir(string dir_name,int curr_dir){
     //Finding the directory
     multimap<int,tuple<string,vector<int>,vector<int>>> dir_metadata = this->dir_metadata;
     if(dir_name == "root"){
-        multimap<int,tuple<string,vector<int>,vector<int>>>::iterator dir =  dir_metadata.find(0);
-        return dir;
+        return 0;
     }
     multimap<int,tuple<string,vector<int>,vector<int>>>::iterator dir = dir_metadata.find(curr_dir);
-    
-    
     for(auto i = get<1>(dir->second).begin(); i != get<1>(dir->second).end(); i++){
-        auto new_dir = dir_metadata.find(*i);
+        multimap<int,tuple<string,vector<int>,vector<int>>>::iterator new_dir = dir_metadata.find(*i);
         string name = get<0>(new_dir->second);
         if(name == dir_name){
-            return new_dir;
+            return new_dir->first;
         }
     }
     multimap<int,tuple<string,vector<int>,vector<int>>>::iterator end = dir_metadata.end();
-    return end;
+    return -1;
 }
 
 

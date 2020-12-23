@@ -43,7 +43,7 @@ class Disk {
 
         //Done
         int mkdir(string dirname,int curr_dir);
-        multimap<int,tuple<string,vector<int>,vector<int>>>::iterator chdir(string path,int curr_dir);
+        int chdir(string path,int curr_dir);
         int create(string fname,int dir_id);
         int del(string fname,int id,int dir_id);
         File open(string fname,int id);

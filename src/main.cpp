@@ -12,6 +12,7 @@
 #include <string>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <mutex>
 #include <fcntl.h>
 #include "disk.h"
 #include "../include/filesystem/file.h"
@@ -20,6 +21,28 @@ using namespace std;
 
 Disk filesystem = Disk(1000);
 string sentinel = "0";
+mutex data_lock;
+
+void print_dir_metadata(){
+    multimap<int,tuple<string,vector<int>,vector<int>>>dir_metadata = filesystem.dir_metadata;
+    for(auto i = dir_metadata.begin();i != dir_metadata.end();i++){
+        cout << i->first << " : " << get<0>(i->second) << "&";
+        for(int j = 0;j < get<1>(i->second).size();j++){
+            cout<<get<1>(i->second)[j] << ",";
+        }
+        cout << "&";
+        for(int j = 0;j < get<2>(i->second).size();j++){
+            cout<<get<2>(i->second)[j] << ",";
+        }
+        cout << "&";
+    }
+}
+void print_metadata(){
+    multimap<int,pair<string,vector<int>>>metadata = filesystem.metadata;
+    for(auto i = metadata.begin();i != metadata.end();i++){
+        cout << i->first << " : " << i->second.first << endl;
+    }
+}
 
 int validate_file_name(string& fname){
     if(fname.find('|') != string::npos || 
@@ -111,9 +134,11 @@ vector<string> parse_command(vector<string> command,int mode = 0){
     return arguments;
 }
 
-string call_file_functions(vector<string> arguments,File& file,bool& is_file_open,multimap<int,tuple<string,vector<int>,vector<int>>>::iterator& curr_dir,int mode = 0){
+string call_file_functions(vector<string> arguments,File& file,bool& is_file_open,int& curr_dir,int mode = 0){
+    data_lock.lock();
     filesystem.update_metadata();
-    curr_dir = filesystem.dir_metadata.find(curr_dir->first);
+    data_lock.unlock();
+    curr_dir = filesystem.dir_metadata.find(curr_dir)->first;
     file.update_file(filesystem.metadata);
     if(arguments[0] == "1"){
         //Write to file
@@ -131,8 +156,9 @@ string call_file_functions(vector<string> arguments,File& file,bool& is_file_ope
                 text = arguments[2];
             }
         }
-       
+        data_lock.lock();
         int result = file.write_to_file(filesystem,text);
+        data_lock.unlock();
         if(result != 0 && mode == 1){
             cout << "\nError: Hard Disk is Full\n";
             return "";
@@ -172,8 +198,9 @@ string call_file_functions(vector<string> arguments,File& file,bool& is_file_ope
         } else if(pos > file.get_data().length() && mode == 1){
             return "\nError: Invalid Value\n";
         }
-        
+        data_lock.lock();
         int result = file.write_to_file(filesystem,pos,text);
+        data_lock.unlock();
         if(result != 0 && mode == 1){
             cout << "\nError: Hard Disk is Full\n";
             return "";
@@ -254,7 +281,9 @@ string call_file_functions(vector<string> arguments,File& file,bool& is_file_ope
         } else if((max_size > file.get_data().length() || max_size == 0) && mode != 1){
             return "\nError: Invalid value\n";
         }
+        data_lock.lock();
         file.truncate_file(filesystem,max_size);
+        data_lock.unlock();
     } else if(arguments[0] == "6"){
         // Move within file
         int start,size,target;
@@ -297,7 +326,9 @@ string call_file_functions(vector<string> arguments,File& file,bool& is_file_ope
                 return "\nError: Invalid value\n";
             }
         }
+        data_lock.lock();
         int result = file.move_within_file(filesystem,start,size,target);
+        data_lock.unlock();
         if(result == -1 || result == -2){
             cout << "\nError: Hard Disk Full"<<endl;
         } 
@@ -317,10 +348,11 @@ string call_file_functions(vector<string> arguments,File& file,bool& is_file_ope
     return "";
 }
 
-string call_disk_functions(vector<string> arguments,File& file,bool& is_file_open,multimap<int,tuple<string,vector<int>,vector<int>>>::iterator& curr_dir,int mode = 0){
+string call_disk_functions(vector<string> arguments,File& file,bool& is_file_open,int& curr_dir,int mode = 0){
     string fname;
+    data_lock.lock();
     filesystem.update_metadata();
-    curr_dir = filesystem.dir_metadata.find(curr_dir->first);
+    data_lock.unlock();
     if(arguments[0] == "1"){
         //Create File
         if(mode == 1){
@@ -345,7 +377,7 @@ string call_disk_functions(vector<string> arguments,File& file,bool& is_file_ope
 
             }
         }
-        vector<int> curr_dir_files = get<2>(curr_dir->second);
+        vector<int> curr_dir_files = get<2>(filesystem.dir_metadata.find(curr_dir)->second);
         multimap<int,pair<string,vector<int>>>::iterator file_ptr;
         for(auto i = curr_dir_files.begin();i != curr_dir_files.end();i++){
             file_ptr = filesystem.metadata.find(*i);
@@ -358,7 +390,9 @@ string call_disk_functions(vector<string> arguments,File& file,bool& is_file_ope
                 }
             } 
         }
-        int result = filesystem.create(fname,curr_dir->first);
+        data_lock.lock();
+        int result = filesystem.create(fname,curr_dir);
+        data_lock.unlock();
         if(result == -1){
             if(mode == 1){
                 cout <<"\nError: Hard Disk is full\n";
@@ -391,7 +425,7 @@ string call_disk_functions(vector<string> arguments,File& file,bool& is_file_ope
             }
         }
         
-        vector<int> curr_dir_files = get<2>(filesystem.dir_metadata.find(curr_dir->first)->second);
+        vector<int> curr_dir_files = get<2>(filesystem.dir_metadata.find(curr_dir)->second);
         multimap<int,pair<string,vector<int>>>::iterator file_ptr;
         for(auto i = curr_dir_files.begin();i != curr_dir_files.end();i++){
             file_ptr = filesystem.metadata.find(*i);
@@ -407,7 +441,9 @@ string call_disk_functions(vector<string> arguments,File& file,bool& is_file_ope
                 return "\nError: File does not exist\n\n";
             }
         }
-        int result = filesystem.del(fname,file_ptr->first,curr_dir->first);
+        data_lock.lock();
+        int result = filesystem.del(fname,file_ptr->first,curr_dir);
+        data_lock.unlock();
         if(result == -1){
             if(mode == 1){
                 cout <<"\nError: Hard Disk is full\n";
@@ -440,7 +476,7 @@ string call_disk_functions(vector<string> arguments,File& file,bool& is_file_ope
             }
         }
 
-        vector<int> curr_dir_files = get<2>(filesystem.dir_metadata.find(curr_dir->first)->second);
+        vector<int> curr_dir_files = get<2>(filesystem.dir_metadata.find(curr_dir)->second);
         multimap<int,pair<string,vector<int>>>::iterator file_entry;
         for(auto i = curr_dir_files.begin();i != curr_dir_files.end();i++){
             file_entry = filesystem.metadata.find(*i);
@@ -519,7 +555,7 @@ string call_disk_functions(vector<string> arguments,File& file,bool& is_file_ope
     } else if (arguments[0] == "4"){
         //Memory Map
         cout << "\n";
-        filesystem.memory_map(curr_dir->first,1);
+        filesystem.memory_map(curr_dir,1);
     } else if(arguments[0] == "5"){
         //Change Directory
         if(mode == 1){
@@ -543,8 +579,8 @@ string call_disk_functions(vector<string> arguments,File& file,bool& is_file_ope
                 return "\nError: Invalid File Name\n";
             };
         }
-        multimap<int,tuple<string,vector<int>,vector<int>>>::iterator new_dir = filesystem.chdir(fname,curr_dir->first);
-        if(new_dir == filesystem.dir_metadata.end()){
+        int new_dir = filesystem.chdir(fname,curr_dir);
+        if(new_dir == -1){
             if(mode == 1){
                 cout << "\nError: Invalid Path\n"<<endl;
                 return "";
@@ -553,7 +589,7 @@ string call_disk_functions(vector<string> arguments,File& file,bool& is_file_ope
             }
         } else {
             curr_dir = new_dir;
-            filesystem.path = filesystem.path + get<0>(curr_dir->second) + "/";
+            filesystem.path = filesystem.path + get<0>(filesystem.dir_metadata.find(curr_dir)->second) + "/";
         }
     } else if(arguments[0] == "6"){
         //Make New Directory
@@ -578,7 +614,9 @@ string call_disk_functions(vector<string> arguments,File& file,bool& is_file_ope
                 return "\nError: Invalid File Name\n";
             }
         }
-        int result = filesystem.mkdir(fname,curr_dir->first);
+        data_lock.lock();
+        int result = filesystem.mkdir(fname,curr_dir);
+        data_lock.unlock();
         if(result == -1){
             if(mode == 1){
                 cout << "\nError: Folder name already exists\n"<<endl;
@@ -596,12 +634,12 @@ string call_disk_functions(vector<string> arguments,File& file,bool& is_file_ope
 
 void process_script(string path){
     vector<vector<string>> commands = read_script(path);
+    
     File file;
     bool is_file_open = false;
 
-    multimap<int,tuple<string,vector<int>,vector<int>>>::iterator curr_dir = filesystem.chdir("root",-1);
+    int curr_dir = 0;
     for(int i = 0;i < commands.size();i++){
-
         if(!is_file_open){
             //Execute Disk Functions
             vector<string> arguments = parse_command(commands[i]);
@@ -623,8 +661,8 @@ void process_script(string path){
             }
         }
     }
-    curr_dir = filesystem.chdir("root",-1);
-    filesystem.memory_map(curr_dir->first);
+    curr_dir = filesystem.chdir("root",0);
+    filesystem.memory_map(curr_dir);
 }
 
 
@@ -641,6 +679,7 @@ int main(int argc,char * argv[]){
 
         for(int i = 0;i < thread_count;i++){
             string path = argv[i + 1];
+            cout << path;
             threads[i] = thread(process_script,path);
         }
 
@@ -651,7 +690,7 @@ int main(int argc,char * argv[]){
         vector<string> arguments;
         File file;
         bool is_file_open;
-        multimap<int,tuple<string,vector<int>,vector<int>>>::iterator curr_dir = filesystem.dir_metadata.find(0);
+        int curr_dir = 0;
 
         while(sentinel != "-1"){
 
