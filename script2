@@ -4,7 +4,7 @@ write|file2|kdj flkajsdlkfj alsdjflaksjd lfjasl kdjfalksdjf lksajd lkffjdslakjfk
 read|file2
 close|file2
 mkdir|dir2
-chdir|dir2
+chdir|./dir2
 create|file1
 open|file1
 write|file1|LDKSJF KFADFd fjlkajsklfj adlkfjalkdfjalsdkjf lksadjflkjadkldjsa lkfajldkf j|

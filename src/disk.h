@@ -28,7 +28,8 @@ class Disk {
 
         //Utility Functions
         void update_metadata();
-        static vector<string> parse_path(string& fname);
+        static vector<string> parse_path(string path);
+        int find_dir_id(int dir_id,vector<string> path);
 
 
         //Getters & Setters
@@ -39,7 +40,7 @@ class Disk {
         string set_dir_metadata(multimap<int,tuple<string,vector<int>,vector<int>>> data);  
 
         //To Be Implemented
-        int move(string source_fname,string target_fname);
+        int move(int file_id,string target_dir_name,int curr_dir);
 
         //Done
         int mkdir(string dirname,int curr_dir);

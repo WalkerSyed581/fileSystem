@@ -47,12 +47,17 @@ void File::update_file(multimap<int,pair<string,vector<int>>>& metadata){
 
 }
 
-int File::write_to_file(Disk& disk,string text){
+int File::write_to_file(Disk& disk,string text,int mode){
+    if(mode == 1){
+        write_to_file(disk,this->data.length() - 1,text);
+        return 0;
+    }
     vector<int> free_segments = disk.free_segments;
     multimap<int,pair<string,vector<int>>> metadata = disk.get_file_metadata();
     vector<string> splits;
     auto file_data = metadata.find(this->id);
     vector<int> file_segments;
+    
     if(file_data != metadata.end()){
 
         if(!file_data->second.second.empty()){

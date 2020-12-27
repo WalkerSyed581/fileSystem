@@ -24,7 +24,7 @@ class File {
         void update_file(multimap<int,pair<string,vector<int>>>& metadata);
 
         //Project Implementation
-        int write_to_file(Disk& disk,string text);
+        int write_to_file(Disk& disk,string text,int mode = 0);
         int write_to_file(Disk& disk,int write_at,string text);
 
         string read_from_file();

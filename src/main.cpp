@@ -49,7 +49,8 @@ int validate_file_name(string& fname){
        fname.find('&') != string::npos || 
        fname.find(',') != string::npos ||
        fname.find('\n') != string::npos || 
-       fname.find('\t') != string::npos){
+       fname.find('\t') != string::npos ||
+       fname.empty()){
         return 0;
     } else {
         return 1;
@@ -96,12 +97,19 @@ vector<string> parse_command(vector<string> command,int mode = 0){
         } else if(command[0] == "mkdir"){
             arguments.push_back("6");
             arguments.push_back(command[1]);
+        } else if(command[0] == "move"){
+            arguments.push_back("7");
+            arguments.push_back(command[1]);
+            arguments.push_back(command[2]);
         }
     } else if (mode == 1){
         if(command[0] == "write"){
             arguments.push_back("1"); 
             arguments.push_back(command[1]);
             arguments.push_back(command[2]);
+            if(command.size() > 3){
+                arguments.push_back(command[3]);
+            }
         } else if(command[0] == "write_at"){
             arguments.push_back("2"); 
             arguments.push_back(command[1]);
@@ -142,22 +150,37 @@ string call_file_functions(vector<string> arguments,File& file,bool& is_file_ope
     file.update_file(filesystem.metadata);
     if(arguments[0] == "1"){
         //Write to file
-        string text;
+        int file_write_mode;
+        string text,buffer;
         if(mode == 1){
             cout << "Enter the text to write into the file: ";
             cin.clear();
             fflush(stdin);
             getline(cin,text,'\n');
             cin.clear();
+            cout << "Do you want to append to the file? (Y/N): ";
+            cin.clear();
+            fflush(stdin);
+            getline(cin,buffer,'\n');
+            cin.clear();
+            if(buffer == "Y"){
+                file_write_mode = 1;
+            }
         } else {
             if(arguments[2].empty()){
                 return "\nError: No text found\n";
             } else {
                 text = arguments[2];
             }
+            if(arguments.size() <= 3){
+                file_write_mode = 0;
+            } else {
+                file_write_mode = 1;
+            }
+
         }
         data_lock.lock();
-        int result = file.write_to_file(filesystem,text);
+        int result = file.write_to_file(filesystem,text,file_write_mode);
         data_lock.unlock();
         if(result != 0 && mode == 1){
             cout << "\nError: Hard Disk is Full\n";
@@ -475,7 +498,6 @@ string call_disk_functions(vector<string> arguments,File& file,bool& is_file_ope
                 return "\nError: Invalid File Name\n";
             }
         }
-
         vector<int> curr_dir_files = get<2>(filesystem.dir_metadata.find(curr_dir)->second);
         multimap<int,pair<string,vector<int>>>::iterator file_entry;
         for(auto i = curr_dir_files.begin();i != curr_dir_files.end();i++){
@@ -554,12 +576,24 @@ string call_disk_functions(vector<string> arguments,File& file,bool& is_file_ope
         }
     } else if (arguments[0] == "4"){
         //Memory Map
+        string buffer;
+        if(mode == 1){
+            cout << "Do you want to only see current directory(Y/N) : ";
+            cin.clear();
+            fflush(stdin);
+            getline(cin,buffer,'\n');
+            if(buffer == "Y"){
+                filesystem.memory_map(curr_dir,1);
+            } else {
+                filesystem.memory_map(0,1);
+            }
+        }
         cout << "\n";
         filesystem.memory_map(curr_dir,1);
     } else if(arguments[0] == "5"){
         //Change Directory
         if(mode == 1){
-            cout << "Enter the name of the folder (Invalid Characters : |,& or a comma): ";
+            cout << "Enter the path to the folder (Invalid Characters : |,& or a comma): ";
             cin.clear();
             fflush(stdin);
             getline(cin,fname,'\n');
@@ -589,7 +623,6 @@ string call_disk_functions(vector<string> arguments,File& file,bool& is_file_ope
             }
         } else {
             curr_dir = new_dir;
-            filesystem.path = filesystem.path + get<0>(filesystem.dir_metadata.find(curr_dir)->second) + "/";
         }
     } else if(arguments[0] == "6"){
         //Make New Directory
@@ -625,6 +658,61 @@ string call_disk_functions(vector<string> arguments,File& file,bool& is_file_ope
                 return "\nError: Folder name already exists\n\n";
             }
         }
+    } else if(arguments[0] == "7"){
+        string fname,dir_path;
+        if(mode == 1){
+            cout << "Enter the name of the file you want to move (Invalid Characters : |,& or a comma): ";
+            cin.clear();
+            fflush(stdin);
+            getline(cin,fname,'\n');
+            cout << "Enter the absolute path of the target folder (Invalid Characters : |,& or a comma): ";
+            cin.clear();
+            fflush(stdin);
+            getline(cin,dir_path,'\n');
+        } else {
+            if(arguments[1].empty() || arguments[2].empty()){
+                return "\nError: Invalid File Name\n";
+            } else {
+                fname = arguments[1];
+                dir_path = arguments[2];
+            }
+        }
+        if(!validate_file_name(fname) || !validate_file_name(dir_path)){
+            if(mode == 1){
+                cout << "\nError: Invalid File Name"<<endl;
+                return "";
+            } else {
+                return "\nError: Invalid File Name\n";
+            }
+        }
+        vector<int> curr_dir_files = get<2>(filesystem.dir_metadata.find(curr_dir)->second);
+        multimap<int,pair<string,vector<int>>>::iterator file_entry;
+        for(auto i = curr_dir_files.begin();i != curr_dir_files.end();i++){
+            file_entry = filesystem.metadata.find(*i);
+            if(file_entry->second.first == fname){
+                break;
+            }
+        }
+        if(file_entry->second.first != fname){
+            if(mode == 1){
+                cout << "\nError: File does not exist\n" << endl;
+                return "";
+            } else {
+                return "\nError: File does not exist\n\n";
+            }
+        }
+        data_lock.lock();
+        int result = filesystem.move(file_entry->first,dir_path,curr_dir);
+        data_lock.unlock();
+        if(result == -1){
+            if(mode == 1){
+                cout << "\nError: File not found\n"<<endl;
+                return "";
+            } else {
+                return "\nError: File not found\n\n";
+            }
+        }
+
     } else if(arguments[0] == "-1"){
         cout << "\nExiting...\n";
         return "";
@@ -674,6 +762,7 @@ int Disk::total_folders = 0;
 int main(int argc,char * argv[]){
     if(argc > 1){
         //Create threads if arguments are passed
+        filesystem.path = "root/";
         int thread_count = argc-1;
         thread threads[thread_count];
 
@@ -691,6 +780,7 @@ int main(int argc,char * argv[]){
         File file;
         bool is_file_open;
         int curr_dir = 0;
+        filesystem.memory_map(0,1);
 
         while(sentinel != "-1"){
 
@@ -702,6 +792,7 @@ int main(int argc,char * argv[]){
             cout << "4\t-> View Map"<<endl;
             cout << "5\t-> Change Directory"<< " Current: "<< filesystem.path << endl;
             cout << "6\t-> Make Directory"<<endl;
+            cout << "7\t-> Change File Location"<<endl;
             cout << "-1\t-> Quit"<<endl;
             cout << "Enter an action: ";
             cin.clear();
