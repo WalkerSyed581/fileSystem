@@ -172,10 +172,8 @@ string call_file_functions(vector<string> arguments,File& file,bool& is_file_ope
             } else {
                 text = arguments[2];
             }
-            if(arguments.size() <= 3){
-                file_write_mode = 0;
-            } else {
-                file_write_mode = 1;
+            if(arguments.size() > 3){
+                file_write_mode = stoi(arguments[3]);
             }
 
         }
