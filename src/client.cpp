@@ -1,4 +1,6 @@
+#include <algorithm>
 #include <cctype>
+#include <chrono>
 #include <cstdio>
 #include <map>
 #include <string>
@@ -12,36 +14,48 @@
 #include <string>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <errno.h>
+#include <string.h>
+#include <netdb.h>
+#include <sys/types.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
 #include <mutex>
 #include <fcntl.h>
-#include "disk.h"
 #include "../include/filesystem/file.h"
 
+#define PORT "3490"  
+
+#define MAXDATASIZE 1000
+
+#define SERVER_IP "127.0.0.1"
+
 using namespace std;
-
-Disk filesystem = Disk(1000);
 string sentinel = "0";
-mutex data_lock;
+int sockfd, numbytes;  
+string path = "root/";
+int curr_dir = 0;
+int is_file_open = 0;
 
-void print_dir_metadata(){
-    multimap<int,tuple<string,vector<int>,vector<int>>>dir_metadata = filesystem.dir_metadata;
-    for(auto i = dir_metadata.begin();i != dir_metadata.end();i++){
-        cout << i->first << " : " << get<0>(i->second) << "&";
-        for(int j = 0;j < get<1>(i->second).size();j++){
-            cout<<get<1>(i->second)[j] << ",";
-        }
-        cout << "&";
-        for(int j = 0;j < get<2>(i->second).size();j++){
-            cout<<get<2>(i->second)[j] << ",";
-        }
-        cout << "&";
-    }
+
+char change_case (char c) {
+    if (std::isupper(c)) 
+        return std::tolower(c); 
+    else
+        return std::toupper(c); 
 }
-void print_metadata(){
-    multimap<int,pair<string,vector<int>>>metadata = filesystem.metadata;
-    for(auto i = metadata.begin();i != metadata.end();i++){
-        cout << i->first << " : " << i->second.first << endl;
+
+// get sockaddr, IPv4 or IPv6:
+void *get_in_addr(struct sockaddr *sa){
+    if (sa->sa_family == AF_INET) {
+        return &(((struct sockaddr_in*)sa)->sin_addr);
     }
+
+    return &(((struct sockaddr_in6*)sa)->sin6_addr);
 }
 
 int validate_file_name(string& fname){
@@ -76,7 +90,33 @@ vector<vector<string>> read_script(string path){
     fin.close(); 
     return commands;
 }
+string create_request(vector<string> command){
+    string parsed_command = to_string(curr_dir) + "|" + to_string(is_file_open) + "|";
+    for(int i = 0; i < command.size();i++){
+        parsed_command += command[i] + "|";
+    }
+    return parsed_command;
+}
 
+string send_request(string s_command){
+    int numbytes;
+    char *message =  &s_command[0];
+
+    char buffer[MAXDATASIZE];
+
+    if (send(sockfd, message, strlen(message), 0) == -1){
+        cout << "\nError: Command not sent\n";
+        return "-1";
+    }
+
+    if(recv(sockfd, buffer, MAXDATASIZE-1, 0) == -1)
+    {
+       printf("Receive failed\n");
+    }
+
+    return buffer;
+
+}
 vector<string> parse_command(vector<string> command,int mode = 0){
     vector<string> arguments;
     if(mode == 0){
@@ -141,13 +181,27 @@ vector<string> parse_command(vector<string> command,int mode = 0){
     }
     return arguments;
 }
+// File parse_file_info(string raw_data){
+//     stringstream buffer(raw_data);
+//     string id, name,data;
+//     getline(buffer,id, '|');
+//     getline(buffer, name, '|');
+//     getline(buffer, data, '|');
+//     if(!stoi(id)||name[0] == string::npos||data[0] == string::npos){
+//         cout << "Info sent is not correct" << endl;
+//         File not_found;
+//         return not_found;
+//     }
+//     File curr_file = File(name,stoi(id));
+//     curr_file.set_data(data);
 
-string call_file_functions(vector<string> arguments,File& file,bool& is_file_open,int& curr_dir,int mode = 0){
-    data_lock.lock();
-    filesystem.update_metadata();
-    data_lock.unlock();
-    curr_dir = filesystem.dir_metadata.find(curr_dir)->first;
-    file.update_file(filesystem.metadata);
+//     return curr_file;
+    
+
+
+// }
+
+string call_file_functions(vector<string> arguments,int mode = 0){
     if(arguments[0] == "1"){
         //Write to file
         int file_write_mode;
@@ -158,11 +212,13 @@ string call_file_functions(vector<string> arguments,File& file,bool& is_file_ope
             fflush(stdin);
             getline(cin,text,'\n');
             cin.clear();
+            arguments.push_back(text);
             cout << "Do you want to append to the file? (Y/N): ";
             cin.clear();
             fflush(stdin);
             getline(cin,buffer,'\n');
             cin.clear();
+            arguments.push_back(buffer);
             if(buffer == "Y"){
                 file_write_mode = 1;
             }
@@ -177,15 +233,10 @@ string call_file_functions(vector<string> arguments,File& file,bool& is_file_ope
             }
 
         }
-        data_lock.lock();
-        int result = file.write_to_file(filesystem,text,file_write_mode);
-        data_lock.unlock();
-        if(result != 0 && mode == 1){
-            cout << "\nError: Hard Disk is Full\n";
-            return "";
-        } else if(result != 0 && mode != 1){
-            return "\nError: Hard Disk is Full\n";
-        }
+        string req = create_request(arguments);
+        string result = send_request(req);
+
+        cout << result << endl;
     } else if(arguments[0] == "2"){
         //Write to file at a position
         string text,buffer;
@@ -198,11 +249,13 @@ string call_file_functions(vector<string> arguments,File& file,bool& is_file_ope
             getline(cin,buffer,'\n');
             cin.clear();
             pos = stoi(buffer);
+            arguments.push_back(buffer);
             cout << "Enter the text to write into the file: ";
             cin.clear();
             fflush(stdin);
             getline(cin,text,'\n');
             cin.clear();
+            arguments.push_back(text);
         } else {
             if(arguments[2].empty() || arguments[3].empty()){
                 return "\nError: Data not found\n";
@@ -212,37 +265,26 @@ string call_file_functions(vector<string> arguments,File& file,bool& is_file_ope
             }
         }
         
-        
-        if(pos > file.get_data().length() && mode == 1){
-            cout << "\nError: Invalid Value\n";
-            return "";
-        } else if(pos > file.get_data().length() && mode == 1){
-            return "\nError: Invalid Value\n";
-        }
-        data_lock.lock();
-        int result = file.write_to_file(filesystem,pos,text);
-        data_lock.unlock();
-        if(result != 0 && mode == 1){
-            cout << "\nError: Hard Disk is Full\n";
-            return "";
-        } else if(result != 0 && mode != 0){
-            return  "\nError: Hard Disk is Full\n";
-        }
+        string req = create_request(arguments);
+        string result = send_request(req);
+
+        cout << result << endl;
     } else if(arguments[0] == "3"){
-        string content = file.read_from_file();
-        if(content.empty()){
+        string req = create_request(arguments);
+        string result = send_request(req);
+        
+        if(result.empty()){
             cout << "Error: No data found"<<endl;
         } else {
             if(mode == 1){
-                cout << "\n\n" + file.name + " : " + content + "\n\n\n";
+                cout << "\n" + result;
             } else {
-                return "\n\n" + file.name + " : " + content + "\n\n\n";
+                return "\n" + result;
             }
         }
     } else if(arguments[0] == "4"){
         int start,size;
         string buffer;
-        string contents = file.get_data();
         if(mode == 1){
             cout << "Enter the position to start reading data from the file: ";
             cin.clear();
@@ -265,17 +307,12 @@ string call_file_functions(vector<string> arguments,File& file,bool& is_file_ope
             }
         }
         
-        if(start > contents.length() || size + start > contents.length()){
-            cout << "\nError: Invalid value\n";
-            return "";
-        }
-        
-
-        string content = file.read_from_file(start,size);
-        if(content.empty()){
+        string req = create_request(arguments);
+        string result = send_request(req);
+        if(result.empty()){
             cout << "Error: No data found"<<endl;
         } else {
-            cout << "\n\nThe contents are: "<<content<<"\n\n" << endl;
+            cout << "\n" + result;
         }
 
     } else if(arguments[0] == "5"){
@@ -287,6 +324,7 @@ string call_file_functions(vector<string> arguments,File& file,bool& is_file_ope
             fflush(stdin);
             getline(cin,buffer,'\n');
             max_size = stoi(buffer);
+            arguments.push_back(buffer);
             cin.clear();
         } else {
             if(arguments[2].empty()){
@@ -295,39 +333,34 @@ string call_file_functions(vector<string> arguments,File& file,bool& is_file_ope
                 max_size = stoi(arguments[2]);
             }
         }
-        
-        if((max_size > file.get_data().length() || max_size == 0) && mode == 1){
-            cout << "\nError: Invalid value\n";
-            return "";
-        } else if((max_size > file.get_data().length() || max_size == 0) && mode != 1){
-            return "\nError: Invalid value\n";
-        }
-        data_lock.lock();
-        file.truncate_file(filesystem,max_size);
-        data_lock.unlock();
+        string req = create_request(arguments);
+        string result = send_request(req);
+        cout << result << endl;
     } else if(arguments[0] == "6"){
         // Move within file
         int start,size,target;
         string buffer;
-        string contents = file.get_data();
         if(mode == 1){
             cout << "Enter the position to start reading data from the file: ";
             cin.clear();
             fflush(stdin);
             getline(cin,buffer,'\n');
             start = stoi(buffer);
+            arguments.push_back(buffer);
             cin.clear();
             cout << "Enter the size of data  to be read from the file: ";
             cin.clear();
             fflush(stdin);
             getline(cin,buffer,'\n');
             size = stoi(buffer);
+            arguments.push_back(buffer);
             cin.clear();
             cout << "Enter the position to put the data into within the file: ";
             cin.clear();
             fflush(stdin);
             getline(cin,buffer,'\n');
             target = stoi(buffer);
+            arguments.push_back(buffer);
             cin.clear();
         } else {
             if(arguments[2].empty() || arguments[3].empty() || arguments[4].empty()){
@@ -338,42 +371,20 @@ string call_file_functions(vector<string> arguments,File& file,bool& is_file_ope
                 target = stoi(arguments[4]);
             }
         }
-        
-        if(start > contents.length() || size + start > contents.length() || target + size > contents.length()){
-            if(mode == 1){
-                cout << "\nError: Invalid value\n";
-                return "";
-            } else {
-                return "\nError: Invalid value\n";
-            }
-        }
-        data_lock.lock();
-        int result = file.move_within_file(filesystem,start,size,target);
-        data_lock.unlock();
-        if(result == -1 || result == -2){
-            cout << "\nError: Hard Disk Full"<<endl;
-        } 
-    } else if(arguments[0] == "-1"){
-        if(mode == 1){
-            cout << "\n\nClosing File..."<<endl;
-            cout << "\n\n";
-            return "";
 
-        } else if(mode != 1) {
-            is_file_open = false;
-            return "";
-        }
-        
-        
+        string req = create_request(arguments);
+        string result = send_request(req);
+        cout << result << endl;
+    } else if(arguments[0] == "-1"){
+        is_file_open = 0;
+        return "";
     }
     return "";
 }
 
-string call_disk_functions(vector<string> arguments,File& file,bool& is_file_open,int& curr_dir,int mode = 0){
+
+string call_disk_functions(vector<string> arguments,int mode = 0){
     string fname;
-    data_lock.lock();
-    filesystem.update_metadata();
-    data_lock.unlock();
     if(arguments[0] == "1"){
         //Create File
         if(mode == 1){
@@ -381,6 +392,7 @@ string call_disk_functions(vector<string> arguments,File& file,bool& is_file_ope
             cin.clear();
             fflush(stdin);
             getline(cin,fname,'\n');
+            arguments.push_back(fname);
         } else {
             if(arguments[1].empty()){
                 return "\nError: Invalid File Name\n";
@@ -398,30 +410,9 @@ string call_disk_functions(vector<string> arguments,File& file,bool& is_file_ope
 
             }
         }
-        vector<int> curr_dir_files = get<2>(filesystem.dir_metadata.find(curr_dir)->second);
-        multimap<int,pair<string,vector<int>>>::iterator file_ptr;
-        for(auto i = curr_dir_files.begin();i != curr_dir_files.end();i++){
-            file_ptr = filesystem.metadata.find(*i);
-            if(file_ptr->second.first == fname){
-                if(mode == 1){
-                    cout << "\nError: File name already exists\n";
-                    return "";
-                } else {
-                    return "\nError: File name already exists\n";
-                }
-            } 
-        }
-        data_lock.lock();
-        int result = filesystem.create(fname,curr_dir);
-        data_lock.unlock();
-        if(result == -1){
-            if(mode == 1){
-                cout <<"\nError: Hard Disk is full\n";
-                return "";
-            } else {
-                return "\nError: Hard Disk is full\n";
-            }
-        }
+        string req = create_request(arguments);
+        string result = send_request(req);
+        cout << "\n" << result << endl;
     } else if (arguments[0] == "2"){
         // Delete File
         if(mode == 1){
@@ -429,6 +420,7 @@ string call_disk_functions(vector<string> arguments,File& file,bool& is_file_ope
             cin.clear();
             fflush(stdin);
             getline(cin,fname,'\n');
+            arguments.push_back(fname);
         } else {
             if(arguments[1].empty()){
                 return "\nError: Invalid File Name\n";
@@ -446,33 +438,9 @@ string call_disk_functions(vector<string> arguments,File& file,bool& is_file_ope
             }
         }
         
-        vector<int> curr_dir_files = get<2>(filesystem.dir_metadata.find(curr_dir)->second);
-        multimap<int,pair<string,vector<int>>>::iterator file_ptr;
-        for(auto i = curr_dir_files.begin();i != curr_dir_files.end();i++){
-            file_ptr = filesystem.metadata.find(*i);
-            if(file_ptr->second.first == fname){
-                break;
-            }
-        }
-        if(file_ptr->second.first != fname){
-            if(mode == 1){
-                cout << "\nError: File does not exist\n" << endl;
-                return "";
-            } else {
-                return "\nError: File does not exist\n\n";
-            }
-        }
-        data_lock.lock();
-        int result = filesystem.del(fname,file_ptr->first,curr_dir);
-        data_lock.unlock();
-        if(result == -1){
-            if(mode == 1){
-                cout <<"\nError: Hard Disk is full\n";
-                return "";
-            } else {
-                return "\nError: Hard Disk is full\n";
-            }
-        }
+        string req = create_request(arguments);
+        string result = send_request(req);
+        cout << "\n" << result << endl;
     } else if (arguments[0] == "3"){
         //Open File
         if(mode == 1){
@@ -480,6 +448,7 @@ string call_disk_functions(vector<string> arguments,File& file,bool& is_file_ope
             cin.clear();
             fflush(stdin);
             getline(cin,fname,'\n');
+            arguments.push_back(fname);
         } else {
             if(arguments[1].empty()){
                 return "\nError: Invalid File Name\n";
@@ -496,24 +465,17 @@ string call_disk_functions(vector<string> arguments,File& file,bool& is_file_ope
                 return "\nError: Invalid File Name\n";
             }
         }
-        vector<int> curr_dir_files = get<2>(filesystem.dir_metadata.find(curr_dir)->second);
-        multimap<int,pair<string,vector<int>>>::iterator file_entry;
-        for(auto i = curr_dir_files.begin();i != curr_dir_files.end();i++){
-            file_entry = filesystem.metadata.find(*i);
-            if(file_entry->second.first == fname){
-                break;
-            }
-        }
-        if(file_entry->second.first != fname){
-            if(mode == 1){
-                cout << "\nError: File does not exist\n" << endl;
+        
+        
+        if(mode == 1){
+            string req = create_request(arguments);
+            string result = send_request(req);
+            if(result.find("Error") != string::npos){
+                cout << "\n" << result << endl;
                 return "";
-            } else {
-                return "\nError: File does not exist\n\n";
+            } else  {
+                is_file_open = stoi(result.substr(0,result.find("|")));
             }
-        }
-        if(file_entry != filesystem.metadata.end() && mode == 1){
-            File file = filesystem.open(fname,file_entry->first);
             string nest_sentinel;
             while(nest_sentinel != "-1"){
                 if(!nest_sentinel.empty() && mode == 1){
@@ -543,15 +505,12 @@ string call_disk_functions(vector<string> arguments,File& file,bool& is_file_ope
                 getline(cin,nest_sentinel,'\n');
                 cin.clear();
 
-                filesystem.update_metadata();
-                file.update_file(filesystem.metadata);
                 vector<string> arguments;
 
                 if(nest_sentinel != "-1"){
                     arguments.clear();
                     arguments.push_back(nest_sentinel);
-                    bool bro;
-                    call_file_functions(arguments,file,bro,curr_dir,1);
+                    call_file_functions(arguments,1);
                 } else {
                     cout << "\n\nClosing File..."<<endl;
                     cout << "\n\n";
@@ -560,18 +519,13 @@ string call_disk_functions(vector<string> arguments,File& file,bool& is_file_ope
                 
             }
 
-        } else if(file_entry != filesystem.metadata.end() && mode != 1) {
+        } 
+        /*
+        else if(file_entry != filesystem.metadata.end() && mode != 1) {
             file = filesystem.open(fname,file_entry->first);
             is_file_open = true;
             return "";
-        } else if(file_entry == filesystem.metadata.end()){
-            if(mode == 1){
-                cout << "\nError: File name not found\n\n";
-                return "";
-            } else {
-                return "\nError: File name not found\n\n";
-            }
-        }
+        }*/
     } else if (arguments[0] == "4"){
         //Memory Map
         string buffer;
@@ -580,14 +534,18 @@ string call_disk_functions(vector<string> arguments,File& file,bool& is_file_ope
             cin.clear();
             fflush(stdin);
             getline(cin,buffer,'\n');
+            transform(buffer.begin(),buffer.end(),buffer.begin(),change_case);
             if(buffer == "Y"){
-                filesystem.memory_map(curr_dir,1);
+                arguments.push_back("Y");
             } else {
-                filesystem.memory_map(0,1);
+                arguments.push_back("Y");
             }
+            string req = create_request(arguments);
+            string result = send_request(req);
+            cout << result;
+        } else {
+            cout << "\n";
         }
-        cout << "\n";
-        filesystem.memory_map(curr_dir,1);
     } else if(arguments[0] == "5"){
         //Change Directory
         if(mode == 1){
@@ -595,6 +553,8 @@ string call_disk_functions(vector<string> arguments,File& file,bool& is_file_ope
             cin.clear();
             fflush(stdin);
             getline(cin,fname,'\n');
+            arguments.push_back(fname);
+            
         } else {
             if(arguments[1].empty()){
                 return "\nError: Invalid File Name\n";
@@ -611,7 +571,15 @@ string call_disk_functions(vector<string> arguments,File& file,bool& is_file_ope
                 return "\nError: Invalid File Name\n";
             };
         }
-        int new_dir = filesystem.chdir(fname,curr_dir);
+        int new_dir;
+        string req = create_request(arguments);
+        string result = send_request(req);
+        if(result.find("Error") != string::npos){
+            cout << "\n" << result << endl;
+            return "";
+        } else  {
+            new_dir = stoi(result);
+        }
         if(new_dir == -1){
             if(mode == 1){
                 cout << "\nError: Invalid Path\n"<<endl;
@@ -629,6 +597,7 @@ string call_disk_functions(vector<string> arguments,File& file,bool& is_file_ope
             cin.clear();
             fflush(stdin);
             getline(cin,fname,'\n');
+            arguments.push_back(fname);
         } else {
             if(arguments[1].empty()){
                 return "\nError: Invalid File Name\n";
@@ -645,17 +614,11 @@ string call_disk_functions(vector<string> arguments,File& file,bool& is_file_ope
                 return "\nError: Invalid File Name\n";
             }
         }
-        data_lock.lock();
-        int result = filesystem.mkdir(fname,curr_dir);
-        data_lock.unlock();
-        if(result == -1){
-            if(mode == 1){
-                cout << "\nError: Folder name already exists\n"<<endl;
-                return "";
-            } else {
-                return "\nError: Folder name already exists\n\n";
-            }
-        }
+        
+        
+        string req = create_request(arguments);
+        string result = send_request(req);
+        cout << result << endl;
     } else if(arguments[0] == "7"){
         string fname,dir_path;
         if(mode == 1){
@@ -663,10 +626,12 @@ string call_disk_functions(vector<string> arguments,File& file,bool& is_file_ope
             cin.clear();
             fflush(stdin);
             getline(cin,fname,'\n');
+            arguments.push_back(fname);
             cout << "Enter the absolute path of the target folder (Invalid Characters : |,& or a comma): ";
             cin.clear();
             fflush(stdin);
             getline(cin,dir_path,'\n');
+            arguments.push_back(dir_path);
         } else {
             if(arguments[1].empty() || arguments[2].empty()){
                 return "\nError: Invalid File Name\n";
@@ -683,41 +648,16 @@ string call_disk_functions(vector<string> arguments,File& file,bool& is_file_ope
                 return "\nError: Invalid File Name\n";
             }
         }
-        vector<int> curr_dir_files = get<2>(filesystem.dir_metadata.find(curr_dir)->second);
-        multimap<int,pair<string,vector<int>>>::iterator file_entry;
-        for(auto i = curr_dir_files.begin();i != curr_dir_files.end();i++){
-            file_entry = filesystem.metadata.find(*i);
-            if(file_entry->second.first == fname){
-                break;
-            }
-        }
-        if(file_entry->second.first != fname){
-            if(mode == 1){
-                cout << "\nError: File does not exist\n" << endl;
-                return "";
-            } else {
-                return "\nError: File does not exist\n\n";
-            }
-        }
-        data_lock.lock();
-        int result = filesystem.move(file_entry->first,dir_path,curr_dir);
-        data_lock.unlock();
-        if(result == -1){
-            if(mode == 1){
-                cout << "\nError: File not found\n"<<endl;
-                return "";
-            } else {
-                return "\nError: File not found\n\n";
-            }
-        }
-
+        string req = create_request(arguments);
+        string result = send_request(req);
+        cout << result << endl;
     } else if(arguments[0] == "-1"){
         cout << "\nExiting...\n";
         return "";
     }
     return "";
 }
-
+/*
 void process_script(string path){
     vector<vector<string>> commands = read_script(path);
     
@@ -751,44 +691,85 @@ void process_script(string path){
     filesystem.memory_map(curr_dir);
 }
 
+*/
 
 
 
-int Disk::total_files = 0;
-int Disk::total_folders = 0;
+
 
 int main(int argc,char * argv[]){
     if(argc > 1){
         //Create threads if arguments are passed
-        filesystem.path = "root/";
-        int thread_count = argc-1;
-        thread threads[thread_count];
+        // filesystem.path = "root/";
+        // int thread_count = argc-1;
+        // thread threads[thread_count];
 
-        for(int i = 0;i < thread_count;i++){
-            string path = argv[i + 1];
-            cout << path;
-            threads[i] = thread(process_script,path);
-        }
+        // for(int i = 0;i < thread_count;i++){
+        //     string path = argv[i + 1];
+        //     cout << path;
+        //     threads[i] = thread(process_script,path);
+        // }
 
-        for(int i = 0;i < thread_count;i++){
-            threads[i].join();
-        }
+        // for(int i = 0;i < thread_count;i++){
+        //     threads[i].join();
+        // }
     } else {
+        
+
+        
+        struct addrinfo hints, *servinfo, *p;
+        int rv;
+        char s[INET6_ADDRSTRLEN];
         vector<string> arguments;
-        File file;
-        bool is_file_open;
-        int curr_dir = 0;
-        filesystem.memory_map(0,1);
+
+        memset(&hints, 0, sizeof hints);
+        hints.ai_family = AF_UNSPEC;
+        hints.ai_socktype = SOCK_STREAM;
+
+        if ((rv = getaddrinfo( SERVER_IP,PORT, &hints, &servinfo)) != 0) {
+            fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
+            return 1;
+        }
+
+        // loop through all the results and connect to the first we can
+        for(p = servinfo; p != NULL; p = p->ai_next) {
+            if ((sockfd = socket(p->ai_family, p->ai_socktype,
+                    p->ai_protocol)) == -1) {
+                perror("client: socket");
+                continue;
+            }
+
+            if (connect(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
+                close(sockfd);
+                perror("client: connect");
+                continue;
+            }
+
+            break;
+        }
+
+        if (p == NULL) {
+            fprintf(stderr, "client: failed to connect\n");
+            return 2;
+        }
+
+        inet_ntop(p->ai_family, get_in_addr((struct sockaddr *)p->ai_addr),
+                s, sizeof s);
+        printf("client: connecting to %s\n", s);
+
+        freeaddrinfo(servinfo); // all done with this structure
+
+       
 
         while(sentinel != "-1"){
 
             cout << "\nEnter the number written corresponding to the action to move further"<<endl;
-            cout << "Current Path: " << filesystem.path << endl;
+            cout << "Current Path: " << path << endl;
             cout << "1\t-> Create File"<<endl;
             cout << "2\t-> Delete File"<<endl;
             cout << "3\t-> Open File"<<endl;
             cout << "4\t-> View Map"<<endl;
-            cout << "5\t-> Change Directory"<< " Current: "<< filesystem.path << endl;
+            cout << "5\t-> Change Directory"<< " Current: "<< path << endl;
             cout << "6\t-> Make Directory"<<endl;
             cout << "7\t-> Change File Location"<<endl;
             cout << "-1\t-> Quit"<<endl;
@@ -797,16 +778,16 @@ int main(int argc,char * argv[]){
             getline(cin,sentinel,'\n');
             cin.clear();
 
-            filesystem.update_metadata();
 
 
             if(sentinel != "-1"){
                 
                 arguments.clear();
                 arguments.push_back(sentinel);
-                call_disk_functions(arguments,file,is_file_open,curr_dir,1);
+                call_disk_functions(arguments,1);
             } else{
                 cout << "\nExiting...\n";
+                close(sockfd);
             }
 
             

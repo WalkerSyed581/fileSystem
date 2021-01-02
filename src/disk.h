@@ -28,8 +28,12 @@ class Disk {
 
         //Utility Functions
         void update_metadata();
+        void print_metadata();
+        void print_dir_metadata();
         static vector<string> parse_path(string path);
         int find_dir_id(int dir_id,vector<string> path);
+
+
 
 
         //Getters & Setters
@@ -48,7 +52,7 @@ class Disk {
         int create(string fname,int dir_id);
         int del(string fname,int id,int dir_id);
         File open(string fname,int id);
-        void memory_map(int dir_id,int level=1);
+        string memory_map(int dir_id,int level=1);
         void close(string fname,int id);
 
 

@@ -31,6 +31,28 @@ multimap<int,tuple<string,vector<int>,vector<int>>> Disk::get_dir_metadata(){
 	return this->dir_metadata;
 }   
 
+void Disk::print_dir_metadata(){
+    multimap<int,tuple<string,vector<int>,vector<int>>>dir_metadata = this->dir_metadata;
+    for(auto i = dir_metadata.begin();i != dir_metadata.end();i++){
+        cout << i->first << " : " << get<0>(i->second) << "&";
+        for(int j = 0;j < get<1>(i->second).size();j++){
+            cout<<get<1>(i->second)[j] << ",";
+        }
+        cout << "&";
+        for(int j = 0;j < get<2>(i->second).size();j++){
+            cout<<get<2>(i->second)[j] << ",";
+        }
+        cout << "&";
+    }
+}
+
+void Disk::print_metadata(){
+    multimap<int,pair<string,vector<int>>>metadata = this->metadata;
+    for(auto i = metadata.begin();i != metadata.end();i++){
+        cout << i->first << " : " << i->second.first << endl;
+    }
+}
+
 
 string Disk::set_dir_metadata(multimap<int,tuple<string,vector<int>,vector<int>>> data){
 	string new_dir_metadata = "";
@@ -589,19 +611,19 @@ void Disk::close(string fname,int id){
 
 
 
-void Disk::memory_map(int id,int level){
+string Disk::memory_map(int id,int level){
 	if(!this->dir_metadata.empty()){
 		multimap<int,pair<string,vector<int>>>::iterator itr;
 		auto curr_dir = this->dir_metadata.find(id);
-		cout<< "|\n|-----";
+		string result = "";
+		result += "|\n|-----";
 		for(int i = 1;i < level;i++){
-			cout << "------";
+			result += "------";
 		}
-		cout << get<0>(curr_dir->second) << "\n|";
-
+		result += get<0>(curr_dir->second) + "\n|";
 		
 		for(auto i = get<1>(curr_dir->second).begin();i != get<1>(curr_dir->second).end() && !get<1>(curr_dir->second).empty(); i++){
-			this->memory_map(*i,level + 1);
+			result += this->memory_map(*i,level + 1);
 		}
 		for(auto i = get<2>(curr_dir->second).begin();i != get<2>(curr_dir->second).end() && !get<2>(curr_dir->second).empty(); i++){
 			auto itr = this->metadata.find(*i);
@@ -612,14 +634,16 @@ void Disk::memory_map(int id,int level){
 				out << itr->second.second.back();
 			}
 
-			cout << "|\n|-----";
+			result += "|\n|-----";
 			for(int i = 0;i < level;i++){
-				cout << "------";
+				result+= "------";
 			}
-			cout << itr->second.first + ", Segments -> " + out.str() + "\n|";
+			result += itr->second.first + ", Segments -> " + out.str() + "\n|";
+			// cout << itr->second.first + ", Segments -> " + out.str() + "\n|";
 		} 
+		return result;
 	} else {
-		cout << "No file found"<<endl;
+		return  "No file found\n";
 	}
 }
 
