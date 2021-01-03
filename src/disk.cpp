@@ -116,9 +116,12 @@ int Disk::find_dir_id(int dir_id,vector<string> path){
 			}
 			curr_path.erase(curr_path.end() - 1);
 		} else if(path[i] != "..") {
-			vector<int> dir_list = get<2>(curr_dir->second);
+			cout << path[i] << endl << curr_dir->first << endl;
+			vector<int> dir_list = get<1>(curr_dir->second);
+			cout << dir_list.size() << endl;
 			for(int j = 0;j < dir_list.size();j++){
 				auto temp = this->dir_metadata.find(dir_list[j]);
+				cout << dir_list[j] << endl;
 				if(get<0>(temp->second) == path[i]){
 					curr_dir = temp;
 					found = true;
@@ -692,6 +695,7 @@ int Disk::chdir(string path,int curr_dir){
 		for(int i = 1;i < parsed_path.size();i++){
 			new_path += parsed_path[i] + "/";
 		}
+		cout << new_path << endl;
 	} else if(path.rfind(".../",0)) {
 		dir_id = curr_dir;
 		int i;

@@ -171,13 +171,13 @@ string call_file_functions(vector<string> arguments,File& file,int& is_file_open
         //Write to file
         int file_write_mode;
         string text,buffer;
-        if(arguments[2].empty()){
+        if(arguments[1].empty()){
             return "\nError: No text found\n";
         } else {
-            text = arguments[2];
+            text = arguments[1];
         }
-        if(arguments.size() > 3){
-            file_write_mode = stoi(arguments[3]);
+        if(arguments.size() > 2){
+            file_write_mode = stoi(arguments[2]);
         }
         data_lock.lock();
         int result = file.write_to_file(filesystem,text,file_write_mode);
@@ -191,11 +191,11 @@ string call_file_functions(vector<string> arguments,File& file,int& is_file_open
         //Write to file at a position
         string text,buffer;
         int pos;
-        if(arguments[2].empty() || arguments[3].empty()){
+        if(arguments[1].empty() || arguments[2].empty()){
             return "\nError: Data not found\n";
         } else {
-            pos = stoi(arguments[2]);
-            text = arguments[3];
+            pos = stoi(arguments[1]);
+            text = arguments[2];
         }
         
         
@@ -221,11 +221,11 @@ string call_file_functions(vector<string> arguments,File& file,int& is_file_open
         int start,size;
         string buffer;
         string contents = file.get_data();
-        if(arguments[2].empty() || arguments[3].empty()){
+        if(arguments[1].empty() || arguments[2].empty()){
             return "\nError: Data not found\n";
         } else {
-            start = stoi(arguments[2]);
-            size = stoi(arguments[3]);
+            start = stoi(arguments[1]);
+            size = stoi(arguments[2]);
         }
         
         if(start > contents.length() || size + start > contents.length()){
@@ -243,10 +243,10 @@ string call_file_functions(vector<string> arguments,File& file,int& is_file_open
     } else if(arguments[0] == "5"){
         string buffer;
         int max_size;
-        if(arguments[2].empty()){
+        if(arguments[1].empty()){
             return "\nError: Data not found\n";
         } else {
-            max_size = stoi(arguments[2]);
+            max_size = stoi(arguments[1]);
         }
         
         if((max_size > file.get_data().length() || max_size == 0)){
@@ -267,12 +267,12 @@ string call_file_functions(vector<string> arguments,File& file,int& is_file_open
         int start,size,target;
         string buffer;
         string contents = file.get_data();
-        if(arguments[2].empty() || arguments[3].empty() || arguments[4].empty()){
+        if(arguments[1].empty() || arguments[2].empty() || arguments[3].empty()){
             return "\nError: Data not found\n";
         } else {
-            start = stoi(arguments[2]);
-            size = stoi(arguments[3]);
-            target = stoi(arguments[4]);
+            start = stoi(arguments[1]);
+            size = stoi(arguments[2]);
+            target = stoi(arguments[3]);
         }
         
         if(start > contents.length() || size + start > contents.length() || target + size > contents.length()){
@@ -293,9 +293,7 @@ string call_file_functions(vector<string> arguments,File& file,int& is_file_open
 
 string call_disk_functions(vector<string> arguments,int& is_file_open,int& curr_dir){
     string fname,return_string;
-    data_lock.lock();
-    filesystem.update_metadata();
-    data_lock.unlock();
+    
 
     if(arguments[0] == "1"){
         //Create File
@@ -397,7 +395,7 @@ string call_disk_functions(vector<string> arguments,int& is_file_open,int& curr_
             return "\nError: Invalid Path\n\n";
         } else {
             curr_dir = new_dir;
-            return_string =  to_string(curr_dir) + "|";
+            return_string =  to_string(curr_dir) + "|" + filesystem.path;
         }
     } else if(arguments[0] == "6"){
         //Make New Directory
@@ -446,30 +444,31 @@ string call_disk_functions(vector<string> arguments,int& is_file_open,int& curr_
     return return_string;
 }
 
-File open_file_server(string fname,int id,int& curr_dir){
+File open_file_server(int id,int& curr_dir){
     //Open File
     File placeholder;
     vector<int> curr_dir_files = get<2>(filesystem.dir_metadata.find(curr_dir)->second);
     multimap<int,pair<string,vector<int>>>::iterator file_entry;
     for(auto i = curr_dir_files.begin();i != curr_dir_files.end();i++){
         file_entry = filesystem.metadata.find(*i);
-        if(file_entry->second.first == fname){
+        if(file_entry->first == id){
             break;
         }
     }
 
-    if(file_entry->second.first != fname){
+    if(file_entry->first != id){
         placeholder.id = -1;
     }
     if(file_entry != filesystem.metadata.end()) {
-        placeholder = filesystem.open(fname,file_entry->first);
+        placeholder = filesystem.open(file_entry->second.first,file_entry->first);
     } else if(file_entry == filesystem.metadata.end()){
         placeholder.id = -1;
     }
     return placeholder;
 }
 
-/*void process_script(string path){
+/*
+void process_script(string path){
     vector<vector<string>> commands = read_script(path);
     
     File file;
@@ -521,29 +520,36 @@ bool is_number(const std::string& s)
 }
 
 void processSocket(int clientSocket){
-    char message[MAXDATASIZE];
-    char buffer[MAXDATASIZE];
+    char message[MAXDATASIZE] = {};
+    char buffer[MAXDATASIZE] = {};
     int newSocket = clientSocket;
     int curr_dir,is_file_open;
     recv(newSocket,buffer,MAXDATASIZE - 1,0);
     // Process the command sent in by client
     socket_lock.lock();
+    cout << buffer << endl;
     vector<string> commands = parse_request(string(buffer));
     if(is_number(commands[0]) && is_number(commands[1])){
         curr_dir = stoi(commands[0]);
         is_file_open = stoi(commands[1]);
+        cout << curr_dir << is_file_open << endl;
         auto start = commands.begin() + 2; 
-        auto end = commands.end() - 1; 
-        vector<string> result((commands.size() - 1) - 2 + 1); 
+        auto end = commands.end(); 
+        vector<string> result((commands.size()) - 2); 
         copy(start, end, result.begin());
+        data_lock.lock();
+        filesystem.update_metadata();
+        data_lock.unlock();
         if(is_file_open){
             // Open File
-            File curr_file = open_file_server(result[1],is_file_open, curr_dir);
+            File curr_file = open_file_server(is_file_open, curr_dir);
             if(curr_file.id != -1){
-                strcpy(message,call_file_functions(result,curr_file,is_file_open,curr_dir).c_str());
+                string temp = call_file_functions(result,curr_file,is_file_open,curr_dir) + '\0';
+                strcpy(message,temp.c_str());
             }
         } else {
-            strcpy(message,call_disk_functions(result, is_file_open,curr_dir).c_str());
+            string temp = call_disk_functions(result, is_file_open,curr_dir) + '\0';
+            strcpy(message,temp.c_str());
         }
     } else {
         strcpy(buffer,"\nError: Invalid Input\n");

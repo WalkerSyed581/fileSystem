@@ -92,6 +92,7 @@ vector<vector<string>> read_script(string path){
 }
 string create_request(vector<string> command){
     string parsed_command = to_string(curr_dir) + "|" + to_string(is_file_open) + "|";
+    cout << parsed_command << endl;
     for(int i = 0; i < command.size();i++){
         parsed_command += command[i] + "|";
     }
@@ -101,8 +102,49 @@ string create_request(vector<string> command){
 string send_request(string s_command){
     int numbytes;
     char *message =  &s_command[0];
+    
 
-    char buffer[MAXDATASIZE];
+    char buffer[MAXDATASIZE] = {};
+    struct addrinfo hints, *servinfo, *p;
+    int rv;
+    char s[INET6_ADDRSTRLEN];
+    vector<string> arguments;
+
+    memset(&hints, 0, sizeof hints);
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+
+    if ((rv = getaddrinfo( SERVER_IP,PORT, &hints, &servinfo)) != 0) {
+        printf("getaddrinfo: %s\n",gai_strerror(rv));
+        return "";
+    }
+
+    // loop through all the results and connect to the first we can
+    for(p = servinfo; p != NULL; p = p->ai_next) {
+        if ((sockfd = socket(p->ai_family, p->ai_socktype,
+                p->ai_protocol)) == -1) {
+            perror("client: socket");
+            continue;
+        }
+
+        if (connect(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
+            close(sockfd);
+            perror("client: connect");
+            continue;
+        }
+
+        break;
+    }
+
+    if (p == NULL) {
+        return "client: failed to connect\n";
+    }
+
+    inet_ntop(p->ai_family, get_in_addr((struct sockaddr *)p->ai_addr),
+            s, sizeof s);
+
+    freeaddrinfo(servinfo); // all done with this structure
+
 
     if (send(sockfd, message, strlen(message), 0) == -1){
         cout << "\nError: Command not sent\n";
@@ -113,7 +155,7 @@ string send_request(string s_command){
     {
        printf("Receive failed\n");
     }
-
+    close(sockfd);
     return buffer;
 
 }
@@ -234,6 +276,7 @@ string call_file_functions(vector<string> arguments,int mode = 0){
 
         }
         string req = create_request(arguments);
+        cout << req << endl;
         string result = send_request(req);
 
         cout << result << endl;
@@ -456,7 +499,6 @@ string call_disk_functions(vector<string> arguments,int mode = 0){
                 fname = arguments[1];
             }
         }
-        
         if(!validate_file_name(fname)){
             if(mode == 1){
                 cout << "\nError: Invalid File Name"<<endl;
@@ -488,6 +530,7 @@ string call_disk_functions(vector<string> arguments,int mode = 0){
                     if(yn[0] == 'N'){
                         cout << "\n\nClosing File..."<<endl;
                         cout << "\n\n";
+                        is_file_open = 0;
                         break;
                     }
                 }
@@ -578,7 +621,13 @@ string call_disk_functions(vector<string> arguments,int mode = 0){
             cout << "\n" << result << endl;
             return "";
         } else  {
+            string delimiter = "|";
+            string token = result.substr(0, result.find(delimiter));
             new_dir = stoi(result);
+
+            result.erase(0,result.find(delimiter) + 1);
+            path = result;
+           
         }
         if(new_dir == -1){
             if(mode == 1){
@@ -717,48 +766,7 @@ int main(int argc,char * argv[]){
         
 
         
-        struct addrinfo hints, *servinfo, *p;
-        int rv;
-        char s[INET6_ADDRSTRLEN];
         vector<string> arguments;
-
-        memset(&hints, 0, sizeof hints);
-        hints.ai_family = AF_UNSPEC;
-        hints.ai_socktype = SOCK_STREAM;
-
-        if ((rv = getaddrinfo( SERVER_IP,PORT, &hints, &servinfo)) != 0) {
-            fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
-            return 1;
-        }
-
-        // loop through all the results and connect to the first we can
-        for(p = servinfo; p != NULL; p = p->ai_next) {
-            if ((sockfd = socket(p->ai_family, p->ai_socktype,
-                    p->ai_protocol)) == -1) {
-                perror("client: socket");
-                continue;
-            }
-
-            if (connect(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
-                close(sockfd);
-                perror("client: connect");
-                continue;
-            }
-
-            break;
-        }
-
-        if (p == NULL) {
-            fprintf(stderr, "client: failed to connect\n");
-            return 2;
-        }
-
-        inet_ntop(p->ai_family, get_in_addr((struct sockaddr *)p->ai_addr),
-                s, sizeof s);
-        printf("client: connecting to %s\n", s);
-
-        freeaddrinfo(servinfo); // all done with this structure
-
        
 
         while(sentinel != "-1"){
@@ -787,7 +795,6 @@ int main(int argc,char * argv[]){
                 call_disk_functions(arguments,1);
             } else{
                 cout << "\nExiting...\n";
-                close(sockfd);
             }
 
             
