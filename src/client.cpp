@@ -32,7 +32,6 @@
 
 #define MAXDATASIZE 1000
 
-#define SERVER_IP "127.0.0.1"
 
 using namespace std;
 string sentinel = "0";
@@ -40,6 +39,7 @@ int sockfd, numbytes;
 string path = "root/";
 int curr_dir = 0;
 int is_file_open = 0;
+string server_ip;
 
 
 char change_case (char c) {
@@ -114,7 +114,9 @@ string send_request(string s_command){
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
 
-    if ((rv = getaddrinfo( SERVER_IP,PORT, &hints, &servinfo)) != 0) {
+    
+
+    if ((rv = getaddrinfo( server_ip.c_str(),PORT, &hints, &servinfo)) != 0) {
         printf("getaddrinfo: %s\n",gai_strerror(rv));
         return "";
     }
@@ -768,9 +770,10 @@ int main(int argc,char * argv[]){
         
         vector<string> arguments;
        
-
+        cout << "Enter the server IP: ";
+        getline(cin,server_ip,'\n');
         while(sentinel != "-1"){
-
+            
             cout << "\nEnter the number written corresponding to the action to move further"<<endl;
             cout << "Current Path: " << path << endl;
             cout << "1\t-> Create File"<<endl;
