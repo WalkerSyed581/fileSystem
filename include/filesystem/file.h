@@ -1,4 +1,3 @@
-
 #ifndef FILE_H
 #define FILE_H
 #include <string>
@@ -33,8 +32,6 @@ class File {
         int move_within_file(Disk& disk,int start,int size,int target);
 
         int truncate_file(Disk& disk,int max_size);
-
-
 };
 #endif
 

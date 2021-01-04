@@ -32,7 +32,7 @@
 #include "disk.h"
 #include "../include/filesystem/file.h"
 
-#define PORT "3490"  
+#define PORT "90"  
 
 #define MAXDATASIZE 1000
 
@@ -177,7 +177,11 @@ string call_file_functions(vector<string> arguments,File& file,int& is_file_open
             text = arguments[1];
         }
         if(arguments.size() > 2){
-            file_write_mode = stoi(arguments[2]);
+            if(arguments[2] == "Y"){
+                file_write_mode = 1;
+            } else {
+                file_write_mode = 0;
+            }
         }
         data_lock.lock();
         int result = file.write_to_file(filesystem,text,file_write_mode);

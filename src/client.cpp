@@ -28,7 +28,7 @@
 #include <fcntl.h>
 #include "../include/filesystem/file.h"
 
-#define PORT "3490"  
+#define PORT "90"  
 
 #define MAXDATASIZE 1000
 
@@ -92,10 +92,10 @@ vector<vector<string>> read_script(string path){
 }
 string create_request(vector<string> command){
     string parsed_command = to_string(curr_dir) + "|" + to_string(is_file_open) + "|";
-    cout << parsed_command << endl;
     for(int i = 0; i < command.size();i++){
         parsed_command += command[i] + "|";
     }
+    cout << parsed_command << endl;
     return parsed_command;
 }
 
@@ -337,12 +337,14 @@ string call_file_functions(vector<string> arguments,int mode = 0){
             getline(cin,buffer,'\n');
             start = stoi(buffer);
             cin.clear();
+            arguments.push_back(buffer);
             cout << "Enter the size of data  to be read from the file: ";
             cin.clear();
             fflush(stdin);
             getline(cin,buffer,'\n');
             size = stoi(buffer);
             cin.clear();
+            arguments.push_back(buffer);
         } else {
             if(arguments[2].empty() || arguments[3].empty()){
                 return "\nError: Data not found\n";
