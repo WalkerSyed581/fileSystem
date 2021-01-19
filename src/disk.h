@@ -1,6 +1,7 @@
 #ifndef DISK_H
 #define DISK_H
 #include <memory>
+#include <mutex>
 #include <string>
 #include <map>
 #include <vector>
@@ -10,11 +11,11 @@ using namespace std;
 
 class File;
 class Disk {
-    
-
     private:
        
         int meta_data_limit;
+        mutex * disk_lock;
+
 
     public:
         //Variables and Constructors

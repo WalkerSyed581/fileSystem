@@ -1,4 +1,6 @@
 #include <cctype>
+#include <semaphore.h> 
+#include <unistd.h> 
 #include <chrono>
 #include <cstdio>
 #include <map>
@@ -26,6 +28,8 @@
 #include <fcntl.h>
 #include <signal.h>
 #include <unistd.h>
+#include <tuple>
+#include <semaphore.h>
 #include <errno.h>
 #include <sys/wait.h>
 #include <signal.h>
@@ -42,7 +46,8 @@ using namespace std;
 
 Disk filesystem = Disk(1000);
 string sentinel = "0";
-mutex socket_lock,data_lock;
+
+map<int,tuple<sem_t,mutex *,int>> open_file_ids;
 
 
 int validate_file_name(string& fname){
@@ -162,13 +167,14 @@ vector<string> parse_command(vector<string> command,int mode = 0){
 
 string call_file_functions(vector<string> arguments,File& file,int& is_file_open,int& curr_dir){
     string return_string;
-    data_lock.lock();
     filesystem.update_metadata();
-    data_lock.unlock();
+    
     curr_dir = filesystem.dir_metadata.find(curr_dir)->first;
     file.update_file(filesystem.metadata);
+    auto file_pos_list = open_file_ids.find(is_file_open);
     if(arguments[0] == "1"){
         //Write to file
+          
         int file_write_mode;
         string text,buffer;
         if(arguments[1].empty()){
@@ -183,9 +189,10 @@ string call_file_functions(vector<string> arguments,File& file,int& is_file_open
                 file_write_mode = 0;
             }
         }
-        data_lock.lock();
+        sem_wait(&get<0>(file_pos_list->second));
         int result = file.write_to_file(filesystem,text,file_write_mode);
-        data_lock.unlock();
+        sem_post(&get<0>(file_pos_list->second));
+
         if(result != 0){
             return "\nError: Hard Disk is Full\n";
         } else {
@@ -206,16 +213,33 @@ string call_file_functions(vector<string> arguments,File& file,int& is_file_open
         if(pos > file.get_data().length()){
             return "\nError: Invalid Value\n";
         }
-        data_lock.lock();
+        sem_wait(&get<0>(file_pos_list->second));
         int result = file.write_to_file(filesystem,pos,text);
-        data_lock.unlock();
+        sem_post(&get<0>(file_pos_list->second));
+        
+
         if(result != 0){
             return  "\nError: Hard Disk is Full\n";
         }else {
             return_string ="\nSuccess: File written to successfully\n";
         }
     } else if(arguments[0] == "3"){
+        get<1>(file_pos_list->second)->lock();
+        get<2>(file_pos_list->second)++;
+        if(get<2>(file_pos_list->second) == 1){
+            sem_wait(&get<0>(file_pos_list->second));
+        }
+        get<1>(file_pos_list->second)->unlock();
+
         string content = file.read_from_file();
+
+        get<1>(file_pos_list->second)->lock();
+        get<2>(file_pos_list->second)--;
+        if(get<2>(file_pos_list->second) == 0) {
+            sem_post(&get<0>(file_pos_list->second));
+        }
+        get<1>(file_pos_list->second)->unlock();
+
         if(content.empty()){
             return "Error: No data found\n";
         } else {
@@ -236,8 +260,22 @@ string call_file_functions(vector<string> arguments,File& file,int& is_file_open
             return "\nError: Invalid value\n";
         }
         
+        get<1>(file_pos_list->second)->lock();
+        get<2>(file_pos_list->second)++;
+        if(get<2>(file_pos_list->second) == 1){
+            sem_wait(&get<0>(file_pos_list->second));
+        }
+        get<1>(file_pos_list->second)->unlock();
 
         string content = file.read_from_file(start,size);
+
+        get<1>(file_pos_list->second)->lock();
+        get<2>(file_pos_list->second)--;
+        if(get<2>(file_pos_list->second) == 0) {
+            sem_post(&get<0>(file_pos_list->second));
+        }
+        get<1>(file_pos_list->second)->unlock();
+        
         if(content.empty()){
             return "\nError: No data found\n";
         } else {
@@ -256,9 +294,9 @@ string call_file_functions(vector<string> arguments,File& file,int& is_file_open
         if((max_size > file.get_data().length() || max_size == 0)){
             return "\nError: Invalid value\n";
         }
-        data_lock.lock();
+        sem_wait(&get<0>(file_pos_list->second));
         int result = file.truncate_file(filesystem,max_size);
-        data_lock.unlock();
+        sem_post(&get<0>(file_pos_list->second));
 
         if(result != 0){
             return "\nError: Hard Disk is Full\n";
@@ -282,15 +320,22 @@ string call_file_functions(vector<string> arguments,File& file,int& is_file_open
         if(start > contents.length() || size + start > contents.length() || target + size > contents.length()){
             return "\nError: Invalid value\n";
         }
-        data_lock.lock();
+        sem_wait(&get<0>(file_pos_list->second));
         int result = file.move_within_file(filesystem,start,size,target);
-        data_lock.unlock();
+        sem_post(&get<0>(file_pos_list->second));
         if(result == -1 || result == -2){
             return "\nError: Hard Disk Full\n";
         }   else {
             return_string ="\nSuccess: File modified successfully\n";
         }
 
+    } else if(arguments[0] == "-1"){
+        auto file_pos_list = open_file_ids.find(is_file_open);
+        if(file_pos_list != open_file_ids.end()){
+            sem_destroy(&get<0>(file_pos_list->second));
+            open_file_ids.erase(file_pos_list);
+        } 
+        return_string = "File closed!!";
     }
     return return_string;
 }
@@ -315,9 +360,7 @@ string call_disk_functions(vector<string> arguments,int& is_file_open,int& curr_
                 return "\nError: File name already exists\n";
             } 
         }
-        data_lock.lock();
         int result = filesystem.create(fname,curr_dir);
-        data_lock.unlock();
         if(result == -1){
             return "\nError: Hard Disk is full\n";
         } else {
@@ -342,9 +385,7 @@ string call_disk_functions(vector<string> arguments,int& is_file_open,int& curr_
         if(file_ptr->second.first != fname){
             return "\nError: File does not exist\n\n";
         }
-        data_lock.lock();
         int result = filesystem.del(fname,file_ptr->first,curr_dir);
-        data_lock.unlock();
         if(result == -1){
             return "\nError: Hard Disk is full\n";
         } else {
@@ -409,9 +450,7 @@ string call_disk_functions(vector<string> arguments,int& is_file_open,int& curr_
             fname = arguments[1];
         }
     
-        data_lock.lock();
         int result = filesystem.mkdir(fname,curr_dir);
-        data_lock.unlock();
         if(result == -1){
             return "\nError: Folder name already exists\n\n";
         } else {
@@ -436,9 +475,7 @@ string call_disk_functions(vector<string> arguments,int& is_file_open,int& curr_
         if(file_entry->second.first != fname){
             return "\nError: File does not exist\n\n";
         }
-        data_lock.lock();
         int result = filesystem.move(file_entry->first,dir_path,curr_dir);
-        data_lock.unlock();
         if(result == -1){
             return "\nError: File not found\n\n";
         } else {
@@ -530,7 +567,6 @@ void processSocket(int clientSocket){
     int curr_dir,is_file_open;
     recv(newSocket,buffer,MAXDATASIZE - 1,0);
     // Process the command sent in by client
-    socket_lock.lock();
     cout << buffer << endl;
     vector<string> commands = parse_request(string(buffer));
     if(is_number(commands[0]) && is_number(commands[1])){
@@ -541,25 +577,33 @@ void processSocket(int clientSocket){
         auto end = commands.end(); 
         vector<string> result((commands.size()) - 2); 
         copy(start, end, result.begin());
-        data_lock.lock();
         filesystem.update_metadata();
-        data_lock.unlock();
         if(is_file_open){
             // Open File
+            auto file_pos_list = open_file_ids.find(is_file_open);
+            if(file_pos_list == open_file_ids.end()){
+                sem_t write_file;
+                sem_init(&write_file, 1,1);
+                mutex * mt;
+                int readcount = 0;
+                tuple<sem_t,mutex *,int>  temp;
+                temp = make_tuple(write_file,mt,readcount);
+                open_file_ids.insert(pair<int,tuple<sem_t,mutex *,int>> (is_file_open,temp));
+            }
+            cout << result[0] <<endl;
             File curr_file = open_file_server(is_file_open, curr_dir);
             if(curr_file.id != -1){
                 string temp = call_file_functions(result,curr_file,is_file_open,curr_dir) + '\0';
                 strcpy(message,temp.c_str());
             }
         } else {
+            
             string temp = call_disk_functions(result, is_file_open,curr_dir) + '\0';
             strcpy(message,temp.c_str());
         }
     } else {
         strcpy(buffer,"\nError: Invalid Input\n");
     }
-    socket_lock.unlock();
-    sleep(1);
     //Send data
     send(newSocket,message,strlen(message),0);
     

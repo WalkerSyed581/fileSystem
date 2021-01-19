@@ -3,8 +3,10 @@
 #include <string>
 #include <fstream>
 #include <algorithm>
+#include <mutex>
 #include "../include/filesystem/file.h"
 #include "disk.h"
+
 
 string File::get_data(){
     return this->data;
@@ -17,14 +19,19 @@ void File::set_data(string data){
 File::File(){
     this->name = "";
     this->id = -1;
+    this->file_lock = new mutex();
 }
 File::File(string name,int id){
     this->name = name;
     this->id = id;
+    this->file_lock = new mutex();
+
 }
 
 void File::update_file(multimap<int,pair<string,vector<int>>>& metadata){
+    this->file_lock->lock();
     auto file_data = metadata.find(this->id);
+    this->file_lock->unlock();
     vector<int> file_segments;
     if(file_data != metadata.end()){
         file_segments = file_data->second.second;
@@ -76,6 +83,7 @@ int File::write_to_file(Disk& disk,string text,int mode){
                 }
                 file_segments.push_back(free_segments[0]);
                 free_segments.erase(free_segments.begin());
+
             }
         } else {
             splits.push_back(text);

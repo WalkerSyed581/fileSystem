@@ -3,19 +3,19 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <mutex>
 
 using namespace std;
 class Disk;
 class File {
     private:
         string data;
-    
+        mutex * file_lock;
     public: 
         File();
         File(string name,int id);
         string name;
         int id;
-        
         string get_data();
         void set_data(string data);
 

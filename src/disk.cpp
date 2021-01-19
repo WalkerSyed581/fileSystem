@@ -9,8 +9,8 @@
 #include <map>
 #include <fstream> 
 #include <sstream>
+#include <mutex>
 #include <vector>
-
 #include "disk.h"
 #include "../include/filesystem/file.h"
 
@@ -25,7 +25,7 @@ File Info Element: &
 Segment Separator: ,
 FileSystem Starts After: |
 FilesSeparator: \n*/
-
+mutex data_lock;
 
 multimap<int,tuple<string,vector<int>,vector<int>>> Disk::get_dir_metadata(){
 	return this->dir_metadata;
@@ -246,10 +246,13 @@ void Disk::update_metadata(){
 			}
 			
 			
+			
 			data.insert(pair<int,pair<string,vector<int>>>(stoi(id),pair<string,vector<int>>(name,segment_array)));
+			this->disk_lock->lock();
 			if(this->metadata.find(stoi(id)) == this->metadata.end()){
 				++Disk::total_files;
 			}
+			this->disk_lock->unlock();
 		}
 	}
    
@@ -303,9 +306,11 @@ void Disk::update_metadata(){
 			}
 			
 			dir_metadata.insert(pair<int,tuple<string,vector<int>,vector<int>>>(stoi(id),tuple<string,vector<int>,vector<int>>(name,dir_array,file_array)));
+			this->disk_lock->lock();
 			if(this->dir_metadata.find(stoi(id)) == this->dir_metadata.end()){
 				++Disk::total_folders;
 			}
+			this->disk_lock->unlock();
 		}
 	}
 
@@ -319,15 +324,17 @@ void Disk::update_metadata(){
 	sort(free_segments.begin(), free_segments.end()); 
 
 	//Setting values
+	this->disk_lock->lock();
 	this->free_segments = free_segments;
 	this->metadata = data;
 	this->dir_metadata = dir_metadata;
+	this->disk_lock->unlock();
 	fin.close();
 }
 
 
-//Done not tested
 Disk::Disk(int meta_data_limit){
+	this->disk_lock = new mutex();
 	this->meta_data_limit = meta_data_limit;
 	multimap<int,pair<string,vector<int>>> data;
 	multimap<int,tuple<string,vector<int>,vector<int>>> dir_metadata;
@@ -492,8 +499,10 @@ Disk::Disk(int meta_data_limit){
 }
 
 int Disk::create(string fname,int curr_dir){
+	this->disk_lock->lock();
 	multimap<int,pair<string,vector<int>>> metadata = this->get_file_metadata();
 	multimap<int,tuple<string,vector<int>,vector<int>>> dir_metadata =this->get_dir_metadata();
+	this->disk_lock->unlock();
 
 	fstream fout;
 	fout.open("../file_system.txt");
@@ -501,38 +510,50 @@ int Disk::create(string fname,int curr_dir){
 	string new_metadata = "";
 	vector<int> file_segments;
 
+	this->disk_lock->lock();
 	++Disk::total_files;
+	this->disk_lock->unlock();
+
 
 
 
 	pair<string,vector<int>> value(fname,file_segments);
 	metadata.insert(pair<int,pair<string,vector<int>>>(Disk::total_files,value));
 
+	this->disk_lock->lock();
 	new_metadata = this->set_file_metadata(metadata);
+	this->disk_lock->unlock();
 
 	if(new_metadata != "-1"){
+		this->disk_lock->lock();
 		fout << new_metadata;
+		this->disk_lock->unlock();
 		map<int,tuple<string,vector<int>,vector<int>>>::iterator dir = dir_metadata.find(curr_dir);
 
 		get<2>(dir->second).push_back(Disk::total_files);
 
+		this->disk_lock->lock();
 		string s_dir_metadata = this->set_dir_metadata(dir_metadata);
 
 		fout.seekg(1001);
 		fout << s_dir_metadata;
-
+		this->disk_lock->unlock();
 		fout.close();
 		return 0;
 	} else {
+		this->disk_lock->lock();
 		--Disk::total_files;
+		this->disk_lock->unlock();
 
 		return -1;
 	}
 }
 
 int Disk::del(string fname,int id,int dir_id){
+	this->disk_lock->lock();
 	multimap<int,pair<string,vector<int>>> metadata = this->get_file_metadata();
 	multimap<int,tuple<string,vector<int>,vector<int>>> dir_metadata =this->get_dir_metadata();
+	this->disk_lock->unlock();
 
 
 	vector<string> dir_list = this->parse_path(fname);
@@ -546,6 +567,7 @@ int Disk::del(string fname,int id,int dir_id){
 		file_segments = file->second.second;
 	}
 
+	this->disk_lock->lock();
 	free_segments.insert( free_segments.end(), file_segments.begin(), file_segments.end() );
 	sort(free_segments.begin(), free_segments.end()); 
 
@@ -553,25 +575,24 @@ int Disk::del(string fname,int id,int dir_id){
 
 	
 	string new_metadata = this->set_file_metadata(metadata);
+	this->disk_lock->unlock();
 
 	if(new_metadata != "-1"){
 		fstream fout;
 		fout.open("../file_system.txt");
 
-
+		this->disk_lock->lock();
 		fout << new_metadata;
-
+		this->disk_lock->unlock();
 		map<int,tuple<string,vector<int>,vector<int>>>::iterator dir = dir_metadata.find(dir_id);
 
-
-		
-		string s_dir_metadata = this->set_dir_metadata(dir_metadata);
-
-		--Disk::total_files;
-
 		fout.seekg(1001);
-		fout << s_dir_metadata;
 
+		this->disk_lock->lock();
+		string s_dir_metadata = this->set_dir_metadata(dir_metadata);
+		--Disk::total_files;
+		fout << s_dir_metadata;
+		this->disk_lock->unlock();
 		fout.close();
 
 		return 0;
@@ -583,7 +604,9 @@ int Disk::del(string fname,int id,int dir_id){
 
 
 File Disk::open(string fname,int id){
+	this->disk_lock->lock();
 	auto file_data = this->metadata.find(id);
+	this->disk_lock->unlock();
 	vector<int> file_segments;
 	if(file_data != this->metadata.end()){
 		file_segments = file_data->second.second;
@@ -617,7 +640,9 @@ void Disk::close(string fname,int id){
 string Disk::memory_map(int id,int level){
 	if(!this->dir_metadata.empty()){
 		multimap<int,pair<string,vector<int>>>::iterator itr;
+		this->disk_lock->lock();
 		auto curr_dir = this->dir_metadata.find(id);
+		this->disk_lock->unlock();
 		string result = "";
 		result += "|\n|-----";
 		for(int i = 1;i < level;i++){
@@ -668,7 +693,6 @@ int Disk::mkdir(string dir_name,int curr_dir){
 	string s_dir_metadata = this->set_dir_metadata(dir_metadata);
 	fstream fout;
 	fout.open("../file_system.txt");
-
 	fout.seekg(1001);
 	fout << s_dir_metadata;
 
@@ -679,8 +703,9 @@ int Disk::mkdir(string dir_name,int curr_dir){
 //Opening a directory 
 int Disk::chdir(string path,int curr_dir){
 	//Finding the directory
-
+	this->disk_lock->lock();
 	multimap<int,tuple<string,vector<int>,vector<int>>> dir_metadata = this->dir_metadata;
+	this->disk_lock->unlock();
 
 	vector<string> curr_path = Disk::parse_path(this->path);
 	int dir_id;
@@ -733,8 +758,9 @@ int Disk::move(int file_id,string path,int curr_dir){
 	vector<string> parsed_path = Disk::parse_path(path);
 	int target_dir_id = Disk::find_dir_id(0,parsed_path);
 	
-
+	this->disk_lock->lock();
 	multimap<int,tuple<string,vector<int>,vector<int>>> dir_metadata = this->dir_metadata;
+	this->disk_lock->unlock();
 	multimap<int,tuple<string,vector<int>,vector<int>>>::iterator target_dir_entry = dir_metadata.find(target_dir_id);
 	multimap<int,tuple<string,vector<int>,vector<int>>>::iterator curr_dir_entry = dir_metadata.find(curr_dir);
 
@@ -747,16 +773,19 @@ int Disk::move(int file_id,string path,int curr_dir){
 		return -1;
 	}
 
+	this->disk_lock->lock();
 	get<2>(target_dir_entry->second).push_back(file_id);
 
-	string s_dir_metadata = this->set_dir_metadata(dir_metadata);
 
+	string s_dir_metadata = this->set_dir_metadata(dir_metadata);
+	this->disk_lock->unlock();
 	fstream fout;
 	fout.open("../file_system.txt");
 
 	fout.seekg(1001);
+	this->disk_lock->lock();
 	fout << s_dir_metadata;
-
+	this->disk_lock->unlock();
 	fout.close();
 	return 0;
 

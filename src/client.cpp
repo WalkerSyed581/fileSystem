@@ -423,6 +423,9 @@ string call_file_functions(vector<string> arguments,int mode = 0){
         string result = send_request(req);
         cout << result << endl;
     } else if(arguments[0] == "-1"){
+        string req = create_request(arguments);
+        string result = send_request(req);
+        cout << result << endl;
         is_file_open = 0;
         return "";
     }
