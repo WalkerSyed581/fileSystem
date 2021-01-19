@@ -562,6 +562,12 @@ string call_disk_functions(vector<string> arguments,int mode = 0){
                     arguments.push_back(nest_sentinel);
                     call_file_functions(arguments,1);
                 } else {
+                    arguments.clear();
+                    arguments.push_back(nest_sentinel);
+                    string req = create_request(arguments);
+                    string result = send_request(req);
+                    cout << result << endl;
+                    is_file_open = 0;
                     cout << "\n\nClosing File..."<<endl;
                     cout << "\n\n";
                     break;
